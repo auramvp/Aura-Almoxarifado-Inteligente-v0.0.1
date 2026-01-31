@@ -1,0 +1,207 @@
+
+import React, { useState, useEffect } from 'react';
+import { db } from '../services/db';
+import { Sector, SectorPerson } from '../types';
+import { 
+  Plus, Edit, Trash2, X, Save, Users, Building2, 
+  Palette, UserPlus, UserMinus, Hash, User 
+} from 'lucide-react';
+
+const Sectors = ({ user }: any) => {
+  const [sectors, setSectors] = useState<Sector[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingSector, setEditingSector] = useState<Sector | null>(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    color: '#3b82f6',
+    people: [] as SectorPerson[]
+  });
+
+  const [newPerson, setNewPerson] = useState({ name: '', matricula: '' });
+
+  const canEdit = user.role === 'ALMOXARIFE' || user.permissions?.sectors === 'full';
+
+  const loadSectors = async () => {
+    const data = await db.getSectors();
+    setSectors(data);
+  };
+
+  useEffect(() => {
+    loadSectors();
+  }, []);
+
+  const handleOpenModal = (s: Sector | null = null) => {
+    if (s) {
+      setEditingSector(s);
+      setFormData({
+        name: s.name,
+        color: s.color,
+        people: s.people || []
+      });
+    } else {
+      setEditingSector(null);
+      setFormData({ name: '', color: '#3b82f6', people: [] });
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleAddPerson = () => {
+    if (!newPerson.name.trim() || !newPerson.matricula.trim()) return;
+    setFormData({
+      ...formData,
+      people: [...formData.people, { ...newPerson }]
+    });
+    setNewPerson({ name: '', matricula: '' });
+  };
+
+  const handleRemovePerson = (idx: number) => {
+    setFormData({
+      ...formData,
+      people: formData.people.filter((_, i) => i !== idx)
+    });
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingSector) {
+      await db.updateSector(editingSector.id, formData);
+    } else {
+      await db.saveSector(formData);
+    }
+    await loadSectors();
+    setIsModalOpen(false);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (window.confirm('Excluir este setor e todos os vínculos de pessoas?')) {
+      await db.deleteSector(id);
+      await loadSectors();
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Gestão de Setores</h2>
+          <p className="text-slate-500 dark:text-slate-400">Organize o almoxarifado por centros de custo e colaboradores.</p>
+        </div>
+        {canEdit && (
+          <button onClick={() => handleOpenModal()} className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-500/20">
+            <Plus size={20} /> Novo Setor
+          </button>
+        )}
+      </header>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {sectors.map(s => (
+          <div key={s.id} className="bg-white dark:bg-slate-900 rounded-[28px] border border-slate-200 dark:border-slate-800 p-6 shadow-sm hover:shadow-md transition-all group">
+            <div className="flex justify-between items-start mb-4">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-inner bg-slate-50 dark:bg-slate-800" style={{ borderLeft: `4px solid ${s.color}` }}>
+                  <Building2 className="text-slate-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-800 dark:text-slate-100">{s.name}</h3>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: s.color }} />
+                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{s.people.length} Colaboradores</span>
+                  </div>
+                </div>
+              </div>
+              {canEdit && (
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => handleOpenModal(s)} className="p-2 text-slate-400 hover:text-blue-600 transition"><Edit size={18} /></button>
+                  <button onClick={() => handleDelete(s.id)} className="p-2 text-slate-400 hover:text-red-600 transition"><Trash2 size={18} /></button>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2 mt-4 max-h-32 overflow-y-auto pr-2 custom-scrollbar">
+              {s.people.map((p, i) => (
+                <div key={i} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    <User size={12} className="text-slate-400 shrink-0" />
+                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300 truncate">{p.name}</span>
+                  </div>
+                  <span className="text-[10px] font-mono font-black text-blue-500 px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/30 rounded shrink-0">{p.matricula}</span>
+                </div>
+              ))}
+              {s.people.length === 0 && <p className="text-center py-4 text-xs text-slate-400 italic">Sem pessoas vinculadas</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-[32px] shadow-2xl w-full max-w-2xl overflow-hidden border dark:border-slate-800 animate-in zoom-in duration-200">
+            <div className="px-8 py-6 border-b dark:border-slate-800 flex items-center justify-between">
+              <h3 className="text-xl font-black uppercase tracking-widest flex items-center gap-3">
+                <Building2 className="text-blue-600" /> {editingSector ? 'Editar Setor' : 'Novo Setor'}
+              </h3>
+              <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-red-500 transition"><X size={24} /></button>
+            </div>
+
+            <form onSubmit={handleSave} className="p-8 space-y-8 max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="col-span-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1 mb-2 block">Identificação do Setor</label>
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <input required type="text" className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Nome do Setor (Ex: Manutenção)" />
+                    </div>
+                    <div className="w-20 shrink-0">
+                      <input type="color" className="w-full h-full p-2 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl cursor-pointer" value={formData.color} onChange={e => setFormData({...formData, color: e.target.value})} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="col-span-2 space-y-4">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1 block">Colaboradores do Setor</label>
+                  
+                  <div className="flex gap-3 bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl">
+                    <div className="flex-1 space-y-2">
+                      <div className="relative">
+                        <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input type="text" className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-900 border-none rounded-xl text-sm font-bold outline-none" placeholder="Nome do Colaborador" value={newPerson.name} onChange={e => setNewPerson({...newPerson, name: e.target.value})} />
+                      </div>
+                      <div className="relative">
+                        <Hash size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input type="text" className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-900 border-none rounded-xl text-sm font-black outline-none" placeholder="Matrícula / ID" value={newPerson.matricula} onChange={e => setNewPerson({...newPerson, matricula: e.target.value})} />
+                      </div>
+                    </div>
+                    <button type="button" onClick={handleAddPerson} className="px-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition flex items-center justify-center">
+                      <UserPlus size={24} />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                    {formData.people.map((p, i) => (
+                      <div key={i} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-xl shadow-sm">
+                        <div className="overflow-hidden">
+                          <p className="text-sm font-bold truncate">{p.name}</p>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{p.matricula}</p>
+                        </div>
+                        <button type="button" onClick={() => handleRemovePerson(i)} className="p-2 text-slate-300 hover:text-red-500 transition">
+                          <UserMinus size={18} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-6 border-t dark:border-slate-800 flex gap-4">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest">Cancelar</button>
+                <button type="submit" className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20">Gravar Setor</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Sectors;

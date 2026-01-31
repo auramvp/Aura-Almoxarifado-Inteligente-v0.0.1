@@ -1,0 +1,5 @@
+{
+  "name": "Copy of Aura Almoxarifado Inteligente",
+  "description": "Sistema completo para controle de estoque, movimentações (E/S), cálculo de preço médio (PMED), relatórios financeiros e operacionais com suporte a importação de dados.",
+  "requestFramePermissions": []
+}
