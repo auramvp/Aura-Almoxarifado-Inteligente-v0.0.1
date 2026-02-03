@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { 
-  Building2, Users, CreditCard, Clock, 
+import {
+  Building2, Users, CreditCard, Clock,
   Plus, Mail, Shield, CheckCircle2, AlertCircle,
   ChevronRight, Calendar, DollarSign, Phone, Loader2,
   Edit2, Save, X, Trash2, Copy,
@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { User, Company, UserRole, UserPermissions, PermissionLevel, Subscription, Plan, Invoice } from '../types';
 import { db } from '../services/db';
+import { EmailService } from '../services/emailService';
 
 interface SettingsProps {
   user: User;
@@ -17,14 +18,17 @@ interface SettingsProps {
 const Settings: React.FC<SettingsProps> = ({ user, company }) => {
   const [activeTab, setActiveTab] = useState<'users' | 'billing' | 'company' | 'alerts'>('company');
   const [showAddUser, setShowAddUser] = useState(false);
-  
+
   // Alert Settings State
   const [alertSettings, setAlertSettings] = useState({
     minStock: true,
-    minStockFrequency: 'daily',
+    minStockFrequency: 'daily' as 'daily' | 'weekly',
     unusualConsumption: false,
     consumptionThreshold: 20,
-    alertEmails: ''
+    alertEmails: '',
+    alertDays: [1, 2, 3, 4, 5],
+    alertStartTime: '08:00',
+    alertEndTime: '18:00'
   });
 
   const [subscription, setSubscription] = useState<Subscription | null>(null);
@@ -46,23 +50,24 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
 
   const [newUser, setNewUser] = useState<{
     name: string;
+    email: string;
     role: UserRole;
     permissions: UserPermissions;
-  }>({ 
-    name: '', 
+  }>({
+    name: '',
+    email: '',
     role: UserRole.AUX_ALMOXARIFE,
     permissions: defaultPermissions
   });
-  const [generatedCode, setGeneratedCode] = useState<string>('');
 
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Company>>({});
   const [loading, setLoading] = useState(false);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [successModalData, setSuccessModalData] = useState<{name: string, code: string} | null>(null);
+  const [successModalData, setSuccessModalData] = useState<{ name: string, email: string } | null>(null);
 
-  const [editingPermissionsUser, setEditingPermissionsUser] = useState<{user: User, permissions: UserPermissions} | null>(null);
+  const [editingPermissionsUser, setEditingPermissionsUser] = useState<{ user: User, permissions: UserPermissions } | null>(null);
   const [showPermissionModal, setShowPermissionModal] = useState(false);
 
   const handleOpenPermissionsModal = (user: User) => {
@@ -91,13 +96,7 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
     }
   };
 
-  React.useEffect(() => {
-    if (showAddUser && !generatedCode) {
-      // Gera código de 4 dígitos (1000-9999)
-      const code = Math.floor(1000 + Math.random() * 9000).toString();
-      setGeneratedCode(code);
-    }
-  }, [showAddUser]);
+  // No longer need generatedCode logic
 
   React.useEffect(() => {
     if (company) {
@@ -131,18 +130,18 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
   }, [activeTab, company]);
 
   const loadSubscription = async () => {
-      if (!company) return;
-      setLoadingSubscription(true);
-      try {
-          const sub = await db.getSubscription(company.id);
-          const invs = await db.getInvoices(company.id);
-          setSubscription(sub);
-          setInvoices(invs);
-      } catch (error) {
-          console.error('Error loading subscription:', error);
-      } finally {
-          setLoadingSubscription(false);
-      }
+    if (!company) return;
+    setLoadingSubscription(true);
+    try {
+      const sub = await db.getSubscription(company.id);
+      const invs = await db.getInvoices(company.id);
+      setSubscription(sub);
+      setInvoices(invs);
+    } catch (error) {
+      console.error('Error loading subscription:', error);
+    } finally {
+      setLoadingSubscription(false);
+    }
   };
 
   const handleUpdateRole = async (userId: string, newRole: UserRole) => {
@@ -184,24 +183,24 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!company) return;
-    
+
     try {
       const addedUser = await db.addUser({
         name: newUser.name,
+        email: newUser.email,
         role: newUser.role,
         companyId: company.id,
-        accessCode: generatedCode,
+        accessCode: '', // No PIN needed
         permissions: newUser.role === UserRole.AUX_ALMOXARIFE ? newUser.permissions : undefined
       });
 
       setUsers([...users, addedUser]);
-      
-      setSuccessModalData({ name: addedUser.name, code: generatedCode });
+
+      setSuccessModalData({ name: addedUser.name, email: addedUser.email });
       setShowSuccessModal(true);
-      
+
       setShowAddUser(false);
-      setNewUser({ name: '', role: UserRole.AUX_ALMOXARIFE, permissions: defaultPermissions });
-      setGeneratedCode('');
+      setNewUser({ name: '', email: '', role: UserRole.AUX_ALMOXARIFE, permissions: defaultPermissions });
     } catch (error: any) {
       console.error('Error adding user:', error);
       if (error.message && error.message.includes('access_code')) {
@@ -227,22 +226,22 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
 
   const handleAddEmail = () => {
     if (!newEmail) return;
-    
+
     // Basic validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(newEmail)) {
       setEmailError('E-mail inválido');
       return;
     }
-    
+
     const currentEmails = getEmailsArray();
     if (currentEmails.includes(newEmail)) {
       setEmailError('E-mail já adicionado');
       return;
     }
-    
+
     const updatedEmails = [...currentEmails, newEmail].join(',');
-    setAlertSettings({...alertSettings, alertEmails: updatedEmails});
+    setAlertSettings({ ...alertSettings, alertEmails: updatedEmails });
     setNewEmail('');
     setEmailError('');
   };
@@ -250,7 +249,7 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
   const handleRemoveEmail = (emailToRemove: string) => {
     const currentEmails = getEmailsArray();
     const updatedEmails = currentEmails.filter(e => e !== emailToRemove).join(',');
-    setAlertSettings({...alertSettings, alertEmails: updatedEmails});
+    setAlertSettings({ ...alertSettings, alertEmails: updatedEmails });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -260,10 +259,12 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
     }
   };
 
-  // Load alert settings when company data is available
   React.useEffect(() => {
     if (company?.settings?.alerts) {
-      setAlertSettings(company.settings.alerts);
+      setAlertSettings({
+        ...alertSettings,
+        ...company.settings.alerts
+      });
     }
   }, [company]);
 
@@ -277,7 +278,7 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
 
   const handleSaveAlerts = async () => {
     if (!company) return;
-    
+
     // Validate emails
     if (alertSettings.alertEmails && !validateEmails(alertSettings.alertEmails)) {
       setEmailError('Um ou mais e-mails são inválidos. Verifique a formatação.');
@@ -287,9 +288,9 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
 
     const btn = document.getElementById('save-alerts-btn');
     const originalText = btn ? btn.innerHTML : '';
-    
+
     if (btn) btn.innerHTML = '<span class="animate-spin mr-2">⏳</span> Salvando...';
-    
+
     try {
       await db.updateCompany(company.id, {
         settings: {
@@ -297,18 +298,33 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
           alerts: alertSettings
         }
       });
-      
+
       if (btn) btn.innerHTML = '<span class="mr-2">✅</span> Salvo!';
+
+      // Enviar e-mail de confirmação
+      const emails = getEmailsArray();
+      if (emails.length > 0) {
+        const daysOfWeek = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+        const selectedDays = alertSettings.alertDays?.map(d => daysOfWeek[d]) || [];
+
+        EmailService.sendAlertScheduleConfirmation({
+          to: emails,
+          days: selectedDays,
+          startTime: alertSettings.alertStartTime || '08:00',
+          endTime: alertSettings.alertEndTime || '18:00'
+        }).catch(err => console.error('Erro ao enviar e-mail de confirmação:', err));
+      }
+
       setTimeout(() => {
         if (btn) btn.innerHTML = originalText;
       }, 2000);
-      
+
     } catch (error: any) {
       console.error('Error saving alerts:', error);
       if (error.message?.includes('settings')) {
-         alert('Erro: A coluna "settings" não existe no banco de dados. Por favor, adicione-a via SQL Editor: ALTER TABLE companies ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT \'{}\'::jsonb;');
+        alert('Erro: A coluna "settings" não existe no banco de dados. Por favor, adicione-a via SQL Editor: ALTER TABLE companies ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT \'{}\'::jsonb;');
       } else {
-         alert('Erro ao salvar configurações de alerta.');
+        alert('Erro ao salvar configurações de alerta.');
       }
       if (btn) btn.innerHTML = originalText;
     }
@@ -324,28 +340,28 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         {/* Sidebar de Navegação */}
         <div className="lg:col-span-1 space-y-2">
-          <button 
+          <button
             onClick={() => setActiveTab('company')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'company' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white dark:bg-slate-900 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
           >
             <Building2 size={18} />
             <span className="font-bold text-sm">Dados da Empresa</span>
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('users')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white dark:bg-slate-900 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
           >
             <Users size={18} />
             <span className="font-bold text-sm">Usuários</span>
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('billing')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'billing' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white dark:bg-slate-900 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
           >
             <CreditCard size={18} />
             <span className="font-bold text-sm">Assinatura e Faturas</span>
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('alerts')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'alerts' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white dark:bg-slate-900 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
           >
@@ -377,9 +393,9 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                       )}
                       <div>
                         {isEditing ? (
-                          <input 
+                          <input
                             value={editForm.name || ''}
-                            onChange={e => setEditForm({...editForm, name: e.target.value})}
+                            onChange={e => setEditForm({ ...editForm, name: e.target.value })}
                             className="text-xl font-bold text-slate-800 dark:text-slate-100 bg-transparent border-b border-slate-300 focus:border-blue-500 outline-none w-full"
                             placeholder="Nome da Empresa"
                           />
@@ -389,18 +405,18 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                         <p className="text-sm text-slate-500 font-mono">{company.cnpj || 'CNPJ não informado'}</p>
                       </div>
                     </div>
-                    
+
                     <div className="flex gap-2">
                       {isEditing ? (
                         <>
-                          <button 
+                          <button
                             onClick={() => setIsEditing(false)}
                             className="p-3 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition"
                             disabled={loading}
                           >
                             <X size={20} />
                           </button>
-                          <button 
+                          <button
                             onClick={handleSaveCompany}
                             className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition shadow-lg shadow-blue-500/20"
                             disabled={loading}
@@ -409,7 +425,7 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                           </button>
                         </>
                       ) : (
-                        <button 
+                        <button
                           onClick={() => setIsEditing(true)}
                           className="p-3 text-blue-600 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-xl transition flex items-center gap-2 font-bold text-xs uppercase tracking-widest"
                         >
@@ -426,9 +442,9 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                         <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300">
                           <Mail size={18} className="text-blue-500 shrink-0" />
                           {isEditing ? (
-                            <input 
+                            <input
                               value={editForm.email || ''}
-                              onChange={e => setEditForm({...editForm, email: e.target.value})}
+                              onChange={e => setEditForm({ ...editForm, email: e.target.value })}
                               className="flex-1 bg-slate-50 dark:bg-slate-800 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
                               placeholder="Email"
                             />
@@ -439,9 +455,9 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                         <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300">
                           <Phone size={18} className="text-blue-500 shrink-0" />
                           {isEditing ? (
-                            <input 
+                            <input
                               value={editForm.phone || ''}
-                              onChange={e => setEditForm({...editForm, phone: e.target.value})}
+                              onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
                               className="flex-1 bg-slate-50 dark:bg-slate-800 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
                               placeholder="Telefone"
                             />
@@ -452,9 +468,9 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                         <div className="flex items-start gap-3 text-slate-600 dark:text-slate-300">
                           <Building2 size={18} className="text-blue-500 mt-1 shrink-0" />
                           {isEditing ? (
-                            <input 
+                            <input
                               value={editForm.address || ''}
-                              onChange={e => setEditForm({...editForm, address: e.target.value})}
+                              onChange={e => setEditForm({ ...editForm, address: e.target.value })}
                               className="flex-1 bg-slate-50 dark:bg-slate-800 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
                               placeholder="Endereço"
                             />
@@ -475,9 +491,9 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                           <div className="w-full">
                             {isEditing ? (
                               <>
-                                <input 
+                                <input
                                   value={editForm.sectorResponsible || ''}
-                                  onChange={e => setEditForm({...editForm, sectorResponsible: e.target.value})}
+                                  onChange={e => setEditForm({ ...editForm, sectorResponsible: e.target.value })}
                                   className="w-full font-bold text-slate-800 dark:text-slate-100 bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none mb-1"
                                   placeholder="Nome do Responsável"
                                 />
@@ -493,11 +509,11 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                         </div>
                         <div className="space-y-2 text-sm">
                           <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                            <Mail size={14} className="shrink-0" /> 
+                            <Mail size={14} className="shrink-0" />
                             {isEditing ? (
-                              <input 
+                              <input
                                 value={editForm.sectorEmail || ''}
-                                onChange={e => setEditForm({...editForm, sectorEmail: e.target.value})}
+                                onChange={e => setEditForm({ ...editForm, sectorEmail: e.target.value })}
                                 className="flex-1 bg-white dark:bg-slate-900 p-1.5 rounded border border-slate-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-emerald-500 text-xs"
                                 placeholder="Email do Setor"
                               />
@@ -506,11 +522,11 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                             )}
                           </div>
                           <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                            <CheckCircle2 size={14} className="shrink-0" /> 
+                            <CheckCircle2 size={14} className="shrink-0" />
                             {isEditing ? (
-                              <input 
+                              <input
                                 value={editForm.sectorWhatsApp || ''}
-                                onChange={e => setEditForm({...editForm, sectorWhatsApp: e.target.value})}
+                                onChange={e => setEditForm({ ...editForm, sectorWhatsApp: e.target.value })}
                                 className="flex-1 bg-white dark:bg-slate-900 p-1.5 rounded border border-slate-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-emerald-500 text-xs"
                                 placeholder="WhatsApp"
                               />
@@ -527,9 +543,9 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                     <div className="mt-8 pt-8 border-t border-slate-100 dark:border-slate-800">
                       <h4 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4">Observações Adicionais</h4>
                       {isEditing ? (
-                        <textarea 
+                        <textarea
                           value={editForm.contactExtra || ''}
-                          onChange={e => setEditForm({...editForm, contactExtra: e.target.value})}
+                          onChange={e => setEditForm({ ...editForm, contactExtra: e.target.value })}
                           className="w-full text-slate-600 dark:text-slate-300 text-sm leading-relaxed bg-slate-50 dark:bg-slate-800/30 p-4 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px]"
                           placeholder="Informações adicionais..."
                         />
@@ -552,7 +568,7 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                   <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Gestão de Usuários</h3>
                   <p className="text-sm text-slate-400">Adicione ou remova membros da sua equipe.</p>
                 </div>
-                <button 
+                <button
                   onClick={() => setShowAddUser(true)}
                   className="px-6 py-3 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition flex items-center gap-2 shadow-lg shadow-blue-500/20"
                 >
@@ -566,35 +582,36 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                     <Users size={18} className="text-blue-600" /> Novo Membro
                   </h4>
                   <form onSubmit={handleAddUser} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input 
+                    <input
                       required
                       placeholder="Nome Completo"
                       value={newUser.name}
-                      onChange={e => setNewUser({...newUser, name: e.target.value})}
+                      onChange={e => setNewUser({ ...newUser, name: e.target.value })}
                       className="px-4 py-3 bg-white dark:bg-slate-800 rounded-xl border-none focus:ring-2 focus:ring-blue-500 outline-none"
                     />
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                        <Shield size={18} className="text-blue-600" />
+                        <Mail size={18} className="text-blue-600" />
                       </div>
-                      <input 
-                        readOnly
-                        value={generatedCode}
-                        className="w-full pl-12 pr-4 py-3 bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 font-mono text-lg tracking-widest text-center rounded-xl border border-blue-100 dark:border-blue-800 outline-none cursor-not-allowed"
-                        title="Código de Acesso Gerado Automaticamente"
+                      <input
+                        required
+                        type="email"
+                        placeholder="E-mail do Usuário"
+                        value={newUser.email}
+                        onChange={e => setNewUser({ ...newUser, email: e.target.value })}
+                        className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-800 rounded-xl border-none focus:ring-2 focus:ring-blue-500 outline-none"
                       />
-                      <p className="text-[10px] text-center text-blue-600/70 mt-1 uppercase font-black tracking-widest">Código de Acesso</p>
                     </div>
                     <div className="md:col-span-2 space-y-2">
-                      <select 
+                      <select
                         value={newUser.role}
-                        onChange={e => setNewUser({...newUser, role: e.target.value as UserRole})}
+                        onChange={e => setNewUser({ ...newUser, role: e.target.value as UserRole })}
                         className="w-full px-4 py-3 bg-white dark:bg-slate-800 rounded-xl border-none focus:ring-2 focus:ring-blue-500 outline-none"
                       >
                         <option value={UserRole.AUX_ALMOXARIFE}>Aux. Almoxarife</option>
                         <option value={UserRole.ALMOXARIFE}>Almoxarife (Admin)</option>
                       </select>
-                      
+
                       {newUser.role === UserRole.AUX_ALMOXARIFE ? (
                         <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
                           <div className="p-4 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-900/30 text-sm">
@@ -627,60 +644,60 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                                   <span className="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wide">{module.label}</span>
                                 </div>
                                 <div className="grid grid-cols-3 gap-2">
-                                   <label className={`
+                                  <label className={`
                                       cursor-pointer p-2 rounded-lg text-[10px] font-bold text-center transition border flex items-center justify-center
-                                      ${newUser.permissions[module.id as keyof UserPermissions] === 'none' 
-                                        ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/30 dark:border-red-800' 
-                                        : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-500'}
+                                      ${newUser.permissions[module.id as keyof UserPermissions] === 'none'
+                                      ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/30 dark:border-red-800'
+                                      : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-500'}
                                    `}>
-                                     <input 
-                                       type="radio" 
-                                       name={`perm-${module.id}`}
-                                       className="hidden"
-                                       checked={newUser.permissions[module.id as keyof UserPermissions] === 'none'}
-                                       onChange={() => setNewUser({
-                                         ...newUser,
-                                         permissions: { ...newUser.permissions, [module.id]: 'none' }
-                                       })}
-                                     />
-                                     Bloqueado
-                                   </label>
-                                   <label className={`
+                                    <input
+                                      type="radio"
+                                      name={`perm-${module.id}`}
+                                      className="hidden"
+                                      checked={newUser.permissions[module.id as keyof UserPermissions] === 'none'}
+                                      onChange={() => setNewUser({
+                                        ...newUser,
+                                        permissions: { ...newUser.permissions, [module.id]: 'none' }
+                                      })}
+                                    />
+                                    Bloqueado
+                                  </label>
+                                  <label className={`
                                       cursor-pointer p-2 rounded-lg text-[10px] font-bold text-center transition border flex items-center justify-center
-                                      ${newUser.permissions[module.id as keyof UserPermissions] === 'view' 
-                                        ? 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:border-blue-800' 
-                                        : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-500'}
+                                      ${newUser.permissions[module.id as keyof UserPermissions] === 'view'
+                                      ? 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:border-blue-800'
+                                      : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-500'}
                                    `}>
-                                     <input 
-                                       type="radio" 
-                                       name={`perm-${module.id}`}
-                                       className="hidden"
-                                       checked={newUser.permissions[module.id as keyof UserPermissions] === 'view'}
-                                       onChange={() => setNewUser({
-                                         ...newUser,
-                                         permissions: { ...newUser.permissions, [module.id]: 'view' }
-                                       })}
-                                     />
-                                     Somente Ver
-                                   </label>
-                                   <label className={`
+                                    <input
+                                      type="radio"
+                                      name={`perm-${module.id}`}
+                                      className="hidden"
+                                      checked={newUser.permissions[module.id as keyof UserPermissions] === 'view'}
+                                      onChange={() => setNewUser({
+                                        ...newUser,
+                                        permissions: { ...newUser.permissions, [module.id]: 'view' }
+                                      })}
+                                    />
+                                    Somente Ver
+                                  </label>
+                                  <label className={`
                                       cursor-pointer p-2 rounded-lg text-[10px] font-bold text-center transition border flex items-center justify-center
-                                      ${newUser.permissions[module.id as keyof UserPermissions] === 'full' 
-                                        ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800' 
-                                        : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-500'}
+                                      ${newUser.permissions[module.id as keyof UserPermissions] === 'full'
+                                      ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800'
+                                      : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-500'}
                                    `}>
-                                     <input 
-                                       type="radio" 
-                                       name={`perm-${module.id}`}
-                                       className="hidden"
-                                       checked={newUser.permissions[module.id as keyof UserPermissions] === 'full'}
-                                       onChange={() => setNewUser({
-                                         ...newUser,
-                                         permissions: { ...newUser.permissions, [module.id]: 'full' }
-                                       })}
-                                     />
-                                     Total
-                                   </label>
+                                    <input
+                                      type="radio"
+                                      name={`perm-${module.id}`}
+                                      className="hidden"
+                                      checked={newUser.permissions[module.id as keyof UserPermissions] === 'full'}
+                                      onChange={() => setNewUser({
+                                        ...newUser,
+                                        permissions: { ...newUser.permissions, [module.id]: 'full' }
+                                      })}
+                                    />
+                                    Total
+                                  </label>
                                 </div>
                               </div>
                             ))}
@@ -726,12 +743,7 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                         <div>
                           <h4 className="font-bold text-slate-800 dark:text-slate-200">{u.name}</h4>
                           <div className="flex items-center gap-2">
-                            <p className="text-xs text-slate-500">{u.email.includes('@aura.local') ? 'Acesso via Código' : u.email}</p>
-                            {u.accessCode && (
-                              <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 font-mono text-slate-500" title="Código de Acesso">
-                                {u.accessCode}
-                              </span>
-                            )}
+                            <p className="text-xs text-slate-500">{u.email}</p>
                           </div>
                         </div>
                       </div>
@@ -744,7 +756,7 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                           <option value={UserRole.ALMOXARIFE}>Almoxarife</option>
                           <option value={UserRole.AUX_ALMOXARIFE}>Aux. Almoxarife</option>
                         </select>
-                        
+
                         <button
                           onClick={() => handleOpenPermissionsModal(u)}
                           className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition"
@@ -774,18 +786,18 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
             <div className="space-y-6">
               {loadingSubscription ? (
                 <div className="text-center py-12">
-                   <Loader2 size={48} className="animate-spin text-blue-600 mx-auto" />
-                   <p className="text-slate-500 mt-4">Carregando detalhes da assinatura...</p>
+                  <Loader2 size={48} className="animate-spin text-blue-600 mx-auto" />
+                  <p className="text-slate-500 mt-4">Carregando detalhes da assinatura...</p>
                 </div>
               ) : !subscription ? (
-                 <div className="bg-white dark:bg-slate-900 rounded-[32px] p-8 border border-slate-200 dark:border-slate-800 shadow-sm text-center">
-                    <CreditCard size={48} className="text-slate-400 mx-auto mb-4" />
-                    <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Nenhuma Assinatura Ativa</h3>
-                    <p className="text-slate-500 mb-6">Sua empresa não possui um plano de assinatura ativo no momento.</p>
-                    <button className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition">
-                        Ver Planos Disponíveis
-                    </button>
-                 </div>
+                <div className="bg-white dark:bg-slate-900 rounded-[32px] p-8 border border-slate-200 dark:border-slate-800 shadow-sm text-center">
+                  <CreditCard size={48} className="text-slate-400 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Nenhuma Assinatura Ativa</h3>
+                  <p className="text-slate-500 mb-6">Sua empresa não possui um plano de assinatura ativo no momento.</p>
+                  <button className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition">
+                    Ver Planos Disponíveis
+                  </button>
+                </div>
               ) : (
                 <>
                   <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[32px] p-8 text-white shadow-xl shadow-blue-600/20 relative overflow-hidden">
@@ -798,15 +810,15 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                       </span>
                       <h3 className="text-3xl font-bold mb-2">Aura Almoxarife</h3>
                       <p className="text-blue-100 mb-8 opacity-80">
-                        {subscription.status === 'active' 
-                            ? `Próxima renovação em ${new Date(subscription.nextBillingDate).toLocaleDateString('pt-BR')}`
-                            : `Status: ${subscription.status.toUpperCase()}`}
+                        {subscription.status === 'active'
+                          ? `Próxima renovação em ${new Date(subscription.nextBillingDate).toLocaleDateString('pt-BR')}`
+                          : `Status: ${subscription.status.toUpperCase()}`}
                       </p>
-                      
+
                       <div className="flex items-end gap-1 mb-8">
                         <span className="text-4xl font-bold">
-                          {subscription.plan?.price 
-                            ? `R$ ${subscription.plan.price.toFixed(2).replace('.', ',')}` 
+                          {subscription.plan?.price
+                            ? `R$ ${subscription.plan.price.toFixed(2).replace('.', ',')}`
                             : 'Sob Consulta'}
                         </span>
                         <span className="text-sm opacity-60 mb-1">
@@ -814,20 +826,38 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4 mb-8 max-w-md">
-                          <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm border border-white/5">
-                              <p className="text-[10px] uppercase tracking-widest opacity-70 mb-1">Usuários</p>
-                              <p className="font-bold text-lg">{subscription.plan?.maxUsers === 999999 ? 'Ilimitado' : subscription.plan?.maxUsers} <span className="text-xs font-normal opacity-70">usuários</span></p>
-                          </div>
-                          <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm border border-white/5">
-                              <p className="text-[10px] uppercase tracking-widest opacity-70 mb-1">Itens</p>
-                              <p className="font-bold text-lg">{subscription.plan?.maxItems === 999999 ? 'Ilimitado' : subscription.plan?.maxItems} <span className="text-xs font-normal opacity-70">itens</span></p>
-                          </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                        <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm border border-white/5">
+                          <p className="text-[10px] uppercase tracking-widest opacity-70 mb-1">Usuários</p>
+                          <p className="font-bold text-lg">{subscription.plan?.maxUsers === 999 ? 'Ilimitado' : subscription.plan?.maxUsers} <span className="text-xs font-normal opacity-70">usuários</span></p>
+                        </div>
+                        <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm border border-white/5">
+                          <p className="text-[10px] uppercase tracking-widest opacity-70 mb-1">Itens</p>
+                          <p className="font-bold text-lg">{subscription.plan?.maxItems === 9999 ? 'Ilimitado' : subscription.plan?.maxItems} <span className="text-xs font-normal opacity-70">itens</span></p>
+                        </div>
                       </div>
 
-                      <div className="flex gap-4">
-                        <button className="px-6 py-3 bg-white text-blue-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-50 transition shadow-lg">Gerenciar Plano</button>
-                        <button className="px-6 py-3 bg-blue-800/50 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-800 transition backdrop-blur-sm border border-white/10">Alterar Cartão</button>
+                      {subscription.plan?.features && subscription.plan.features.length > 0 && (
+                        <div className="mb-8 space-y-2">
+                          <p className="text-[10px] uppercase tracking-widest opacity-70 mb-2">Benefícios Inclusos</p>
+                          <div className="flex flex-wrap gap-2">
+                            {subscription.plan.features.map((feature, idx) => (
+                              <div key={idx} className="flex items-center gap-1.5 bg-white/10 border border-white/10 rounded-lg px-3 py-1.5 backdrop-blur-sm">
+                                <CheckCircle2 size={12} className="text-blue-300" />
+                                <span className="text-xs font-medium text-blue-50">{feature}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap gap-4">
+                        <button className="px-6 py-3 bg-white text-blue-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-50 transition shadow-lg flex items-center gap-2">
+                          <Plus size={16} /> Fazer Upgrade
+                        </button>
+                        <button className="px-6 py-3 bg-red-500/20 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-red-500/40 transition backdrop-blur-sm border border-red-400/20">
+                          Cancelar Assinatura
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -838,31 +868,34 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                     </h3>
                     <div className="space-y-4">
                       {invoices.length === 0 ? (
-                          <p className="text-slate-500 text-center py-4">Nenhuma fatura encontrada.</p>
+                        <p className="text-slate-500 text-center py-4">Nenhuma fatura encontrada.</p>
                       ) : (
-                          invoices.map((inv) => (
-                            <div key={inv.id} className="flex items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-2xl transition border-b border-slate-50 dark:border-slate-800 last:border-0">
-                              <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-xl flex items-center justify-center">
-                                  <DollarSign size={20} />
-                                </div>
-                                <div>
-                                  <h4 className="font-bold text-slate-700 dark:text-slate-200">{inv.description || 'Mensalidade'}</h4>
-                                  <p className="text-xs text-slate-400">{new Date(inv.billingDate).toLocaleDateString('pt-BR')} • {inv.status.toUpperCase()}</p>
-                                </div>
+                        invoices.map((inv: any) => (
+                          <div key={inv.id} className="flex items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-2xl transition border-b border-slate-50 dark:border-slate-800 last:border-0">
+                            <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-xl flex items-center justify-center">
+                                <DollarSign size={20} />
                               </div>
-                              <div className="text-right">
-                                <p className="font-bold text-slate-800 dark:text-slate-100">R$ {inv.amount.toFixed(2).replace('.', ',')}</p>
-                                <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${
-                                    inv.status === 'paid' ? 'text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' : 
-                                    inv.status === 'open' ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' :
-                                    'text-slate-500 bg-slate-50 dark:bg-slate-900/20'
-                                }`}>
-                                    {inv.status === 'paid' ? 'Pago' : inv.status === 'open' ? 'Aberto' : inv.status}
-                                </span>
+                              <div>
+                                <h4 className="font-bold text-slate-700 dark:text-slate-200">{inv.planName || inv.description || 'Mensalidade'}</h4>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <p className="text-xs text-slate-400">{new Date(inv.billingDate).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</p>
+                                  <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                                  <p className="text-xs text-slate-400 uppercase font-black tracking-tighter">{inv.paymentMethod || 'Cartão'}</p>
+                                </div>
                               </div>
                             </div>
-                          ))
+                            <div className="text-right">
+                              <p className="font-bold text-slate-800 dark:text-slate-100 text-lg">R$ {inv.amount.toFixed(2).replace('.', ',')}</p>
+                              <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${inv.status === 'paid' ? 'text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' :
+                                inv.status === 'open' ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' :
+                                  'text-slate-500 bg-slate-50 dark:bg-slate-900/20'
+                                }`}>
+                                {inv.status === 'paid' ? 'Liquidado' : inv.status === 'open' ? 'Aberto' : inv.status}
+                              </span>
+                            </div>
+                          </div>
+                        ))
                       )}
                     </div>
                   </div>
@@ -894,19 +927,19 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                       <div>
                         <h4 className="font-bold text-slate-800 dark:text-slate-200 mb-1">Estoque Mínimo</h4>
                         <p className="text-sm text-slate-500 max-w-md">Receba notificações automáticas quando a quantidade de um produto atingir o nível mínimo de segurança definido.</p>
-                        
+
                         {alertSettings.minStock && (
                           <div className="mt-4 flex items-center gap-3">
                             <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Frequência:</span>
                             <div className="flex bg-white dark:bg-slate-900 rounded-lg p-1 border border-slate-200 dark:border-slate-700">
-                              <button 
-                                onClick={() => setAlertSettings({...alertSettings, minStockFrequency: 'daily'})}
+                              <button
+                                onClick={() => setAlertSettings({ ...alertSettings, minStockFrequency: 'daily' })}
                                 className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition ${alertSettings.minStockFrequency === 'daily' ? 'bg-amber-100 text-amber-700' : 'text-slate-400 hover:text-slate-600'}`}
                               >
                                 Diário
                               </button>
-                              <button 
-                                onClick={() => setAlertSettings({...alertSettings, minStockFrequency: 'weekly'})}
+                              <button
+                                onClick={() => setAlertSettings({ ...alertSettings, minStockFrequency: 'weekly' })}
                                 className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition ${alertSettings.minStockFrequency === 'weekly' ? 'bg-amber-100 text-amber-700' : 'text-slate-400 hover:text-slate-600'}`}
                               >
                                 Semanal
@@ -917,11 +950,11 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                       </div>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        className="sr-only peer" 
+                      <input
+                        type="checkbox"
+                        className="sr-only peer"
                         checked={alertSettings.minStock || false}
-                        onChange={(e) => setAlertSettings({...alertSettings, minStock: e.target.checked})}
+                        onChange={(e) => setAlertSettings({ ...alertSettings, minStock: e.target.checked })}
                       />
                       <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
                     </label>
@@ -936,36 +969,36 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                       <div>
                         <h4 className="font-bold text-slate-800 dark:text-slate-200 mb-1">Consumo Anômalo (IA)</h4>
                         <p className="text-sm text-slate-500 max-w-md">Nossa IA monitora padrões de saída e notifica quando houver um consumo muito acima da média histórica.</p>
-                        
+
                         {alertSettings.unusualConsumption && (
                           <div className="mt-4">
                             <div className="flex justify-between mb-1">
-                                <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Sensibilidade do Alerta</span>
-                                <span className="text-xs font-bold text-purple-600">{alertSettings.consumptionThreshold || 20}% acima da média</span>
+                              <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Sensibilidade do Alerta</span>
+                              <span className="text-xs font-bold text-purple-600">{alertSettings.consumptionThreshold || 20}% acima da média</span>
                             </div>
-                            <input 
-                                type="range" 
-                                min="10" 
-                                max="100" 
-                                step="5"
-                                value={alertSettings.consumptionThreshold || 20}
-                                onChange={(e) => setAlertSettings({...alertSettings, consumptionThreshold: parseInt(e.target.value)})}
-                                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                            <input
+                              type="range"
+                              min="10"
+                              max="100"
+                              step="5"
+                              value={alertSettings.consumptionThreshold || 20}
+                              onChange={(e) => setAlertSettings({ ...alertSettings, consumptionThreshold: parseInt(e.target.value) })}
+                              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
                             />
                             <div className="flex justify-between mt-1 text-[10px] text-slate-400 font-medium">
-                                <span>Mais sensível (10%)</span>
-                                <span>Menos sensível (100%)</span>
+                              <span>Mais sensível (10%)</span>
+                              <span>Menos sensível (100%)</span>
                             </div>
                           </div>
                         )}
                       </div>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        className="sr-only peer" 
+                      <input
+                        type="checkbox"
+                        className="sr-only peer"
                         checked={alertSettings.unusualConsumption || false}
-                        onChange={(e) => setAlertSettings({...alertSettings, unusualConsumption: e.target.checked})}
+                        onChange={(e) => setAlertSettings({ ...alertSettings, unusualConsumption: e.target.checked })}
                       />
                       <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 dark:peer-focus:ring-purple-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-purple-600"></div>
                     </label>
@@ -980,13 +1013,13 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                       <div className="w-full">
                         <h4 className="font-bold text-slate-800 dark:text-slate-200 mb-1">E-mails para Notificação</h4>
                         <p className="text-sm text-slate-500 max-w-md mb-4">Adicione os endereços de e-mail que receberão os alertas.</p>
-                        
+
                         <div className={`w-full bg-white dark:bg-slate-900 p-3 rounded-xl border transition-all ${emailError ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-200 dark:border-slate-700 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent'}`}>
                           <div className="flex flex-wrap gap-2 mb-2">
                             {getEmailsArray().map((email, index) => (
                               <div key={index} className="flex items-center gap-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-1 rounded-lg text-xs font-medium animate-in zoom-in-50 duration-200">
                                 <span>{email}</span>
-                                <button 
+                                <button
                                   onClick={() => handleRemoveEmail(email)}
                                   className="p-0.5 hover:bg-blue-200 dark:hover:bg-blue-800 rounded-full transition-colors"
                                   title="Remover email"
@@ -997,8 +1030,8 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                             ))}
                           </div>
                           <div className="flex gap-2">
-                            <input 
-                              type="text" 
+                            <input
+                              type="text"
                               value={newEmail}
                               onChange={(e) => {
                                 setNewEmail(e.target.value);
@@ -1026,14 +1059,81 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                       </div>
                     </div>
                   </div>
-                  
+
+                  {/* Agendamento de Alertas */}
+                  <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 p-6 bg-slate-50 dark:bg-slate-800/30 rounded-2xl border border-slate-100 dark:border-slate-800">
+                    <div className="flex gap-4 w-full">
+                      <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 rounded-xl flex items-center justify-center shrink-0">
+                        <Clock size={20} />
+                      </div>
+                      <div className="w-full">
+                        <h4 className="font-bold text-slate-800 dark:text-slate-200 mb-1">Agendamento de Alertas</h4>
+                        <p className="text-sm text-slate-500 max-w-md mb-6">Defina em quais dias e horários os e-mails de alerta podem ser enviados.</p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                          <div className="space-y-3">
+                            <span className="text-xs font-black uppercase tracking-widest text-slate-400">Dias da Semana</span>
+                            <div className="flex gap-2">
+                              {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((day, idx) => {
+                                const isSelected = alertSettings.alertDays?.includes(idx);
+                                return (
+                                  <button
+                                    key={idx}
+                                    onClick={() => {
+                                      const currentDays = alertSettings.alertDays || [];
+                                      const newDays = isSelected
+                                        ? currentDays.filter(d => d !== idx)
+                                        : [...currentDays, idx].sort();
+                                      setAlertSettings({ ...alertSettings, alertDays: newDays });
+                                    }}
+                                    className={`w-9 h-9 rounded-lg font-bold text-xs transition-all border ${isSelected
+                                      ? 'bg-indigo-600 border-indigo-600 text-white shadow-md'
+                                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-600'
+                                      }`}
+                                  >
+                                    {day}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            <span className="text-xs font-black uppercase tracking-widest text-slate-400">Janela de Horário</span>
+                            <div className="flex items-center gap-3">
+                              <div className="flex-1">
+                                <input
+                                  type="time"
+                                  value={alertSettings.alertStartTime || '08:00'}
+                                  onChange={(e) => setAlertSettings({ ...alertSettings, alertStartTime: e.target.value })}
+                                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                                <p className="text-[10px] text-slate-400 mt-1 uppercase font-bold tracking-tighter">Início</p>
+                              </div>
+                              <span className="text-slate-300">até</span>
+                              <div className="flex-1">
+                                <input
+                                  type="time"
+                                  value={alertSettings.alertEndTime || '18:00'}
+                                  onChange={(e) => setAlertSettings({ ...alertSettings, alertEndTime: e.target.value })}
+                                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                                <p className="text-[10px] text-slate-400 mt-1 uppercase font-bold tracking-tighter">Fim</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
-                    <button 
+                    <button
                       onClick={handleSaveAlerts}
                       id="save-alerts-btn"
                       className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-blue-700 transition shadow-lg shadow-blue-500/20 flex items-center gap-2"
                     >
-                        <Save size={16} /> Salvar Configurações
+                      <Save size={16} /> Salvar Configurações
                     </button>
                   </div>
                 </div>
@@ -1049,7 +1149,7 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
               <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-2">
                 <CheckCircle2 size={40} className="text-green-600 dark:text-green-400" />
               </div>
-              
+
               <div>
                 <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">Usuário Criado!</h3>
                 <p className="text-slate-500 dark:text-slate-400">O novo membro da equipe já pode acessar o sistema.</p>
@@ -1060,19 +1160,20 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                   <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Nome do Usuário</p>
                   <p className="font-bold text-slate-800 dark:text-slate-200 text-lg">{successModalData.name}</p>
                 </div>
-                
+
                 <div>
-                  <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Código de Acesso</p>
+                  <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">E-mail de Acesso</p>
                   <div className="flex items-center gap-2 bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 dashed border-2 border-blue-200 dark:border-blue-900">
-                    <code className="flex-1 text-2xl font-mono font-bold text-blue-600 text-center tracking-widest">
-                      {successModalData.code}
-                    </code>
-                    <button 
+                    <Mail size={18} className="text-blue-600 ml-2" />
+                    <span className="flex-1 font-bold text-slate-700 dark:text-slate-200 text-center">
+                      {successModalData.email}
+                    </span>
+                    <button
                       onClick={() => {
-                        navigator.clipboard.writeText(successModalData.code);
+                        navigator.clipboard.writeText(successModalData.email);
                       }}
                       className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-blue-600 transition"
-                      title="Copiar código"
+                      title="Copiar e-mail"
                     >
                       <Copy size={20} />
                     </button>
@@ -1080,7 +1181,7 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                 </div>
               </div>
 
-              <button 
+              <button
                 onClick={() => setShowSuccessModal(false)}
                 className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-500/20"
               >
@@ -1106,7 +1207,7 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
               <p className="text-sm text-slate-500 mb-4">
                 Editando permissões para <span className="font-bold text-slate-700 dark:text-slate-300">{editingPermissionsUser.user.name}</span>
               </p>
-              
+
               <div className="grid grid-cols-1 gap-3">
                 {[
                   { id: 'products', label: 'Produtos', icon: Package },
@@ -1123,60 +1224,60 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                       <span className="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wide">{module.label}</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                       <label className={`
+                      <label className={`
                           cursor-pointer p-2 rounded-lg text-[10px] font-bold text-center transition border flex items-center justify-center
-                          ${editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'none' 
-                            ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/30 dark:border-red-800' 
-                            : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-500'}
+                          ${editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'none'
+                          ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/30 dark:border-red-800'
+                          : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-500'}
                        `}>
-                         <input 
-                           type="radio" 
-                           name={`edit-perm-${module.id}`}
-                           className="hidden"
-                           checked={editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'none'}
-                           onChange={() => setEditingPermissionsUser({
-                             ...editingPermissionsUser,
-                             permissions: { ...editingPermissionsUser.permissions, [module.id]: 'none' }
-                           })}
-                         />
-                         Bloqueado
-                       </label>
-                       <label className={`
+                        <input
+                          type="radio"
+                          name={`edit-perm-${module.id}`}
+                          className="hidden"
+                          checked={editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'none'}
+                          onChange={() => setEditingPermissionsUser({
+                            ...editingPermissionsUser,
+                            permissions: { ...editingPermissionsUser.permissions, [module.id]: 'none' }
+                          })}
+                        />
+                        Bloqueado
+                      </label>
+                      <label className={`
                           cursor-pointer p-2 rounded-lg text-[10px] font-bold text-center transition border flex items-center justify-center
-                          ${editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'view' 
-                            ? 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:border-blue-800' 
-                            : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-500'}
+                          ${editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'view'
+                          ? 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:border-blue-800'
+                          : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-500'}
                        `}>
-                         <input 
-                           type="radio" 
-                           name={`edit-perm-${module.id}`}
-                           className="hidden"
-                           checked={editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'view'}
-                           onChange={() => setEditingPermissionsUser({
-                             ...editingPermissionsUser,
-                             permissions: { ...editingPermissionsUser.permissions, [module.id]: 'view' }
-                           })}
-                         />
-                         Ver
-                       </label>
-                       <label className={`
+                        <input
+                          type="radio"
+                          name={`edit-perm-${module.id}`}
+                          className="hidden"
+                          checked={editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'view'}
+                          onChange={() => setEditingPermissionsUser({
+                            ...editingPermissionsUser,
+                            permissions: { ...editingPermissionsUser.permissions, [module.id]: 'view' }
+                          })}
+                        />
+                        Ver
+                      </label>
+                      <label className={`
                           cursor-pointer p-2 rounded-lg text-[10px] font-bold text-center transition border flex items-center justify-center
-                          ${editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'full' 
-                            ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800' 
-                            : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-500'}
+                          ${editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'full'
+                          ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800'
+                          : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-500'}
                        `}>
-                         <input 
-                           type="radio" 
-                           name={`edit-perm-${module.id}`}
-                           className="hidden"
-                           checked={editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'full'}
-                           onChange={() => setEditingPermissionsUser({
-                             ...editingPermissionsUser,
-                             permissions: { ...editingPermissionsUser.permissions, [module.id]: 'full' }
-                           })}
-                         />
-                         Total
-                       </label>
+                        <input
+                          type="radio"
+                          name={`edit-perm-${module.id}`}
+                          className="hidden"
+                          checked={editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'full'}
+                          onChange={() => setEditingPermissionsUser({
+                            ...editingPermissionsUser,
+                            permissions: { ...editingPermissionsUser.permissions, [module.id]: 'full' }
+                          })}
+                        />
+                        Total
+                      </label>
                     </div>
                   </div>
                 ))}

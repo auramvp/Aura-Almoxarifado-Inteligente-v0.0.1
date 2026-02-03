@@ -1,6 +1,6 @@
-import { 
-  Product, StockMovement, CompanySettings, 
-  AuditLog, MovementType 
+import {
+  Product, StockMovement, CompanySettings,
+  AuditLog, MovementType
 } from '../types';
 import { EmailService } from './emailService';
 
@@ -17,7 +17,7 @@ export interface AlertContext {
 }
 
 export const AlertService = {
-  
+
   /**
    * Main entry point to process alerts after a stock movement
    */
@@ -29,17 +29,23 @@ export const AlertService = {
   ) {
     if (!ctx.settings || ctx.recipients.length === 0) return;
 
+    // Check if within alert window (Days/Hours)
+    if (!this.isWithinAlertWindow(ctx.settings)) {
+      console.log('Alerta ignorado: fora da janela de agendamento configurada.');
+      return;
+    }
+
     const { product, currentStock, settings, recipients } = ctx;
-    
+
     // 1. Calculate Metrics
     const avgDailyConsumption = this.calculateAverageConsumption(ctx.movements, 30); // Last 30 days
     const daysToRupture = avgDailyConsumption > 0 ? currentStock / avgDailyConsumption : 999;
     const stockValue = currentStock * Number(product.pmed);
-    
+
     // 2. Check Min Stock (CRITICAL)
     if (settings.minStock && currentStock <= Number(product.minStock)) {
       const isCritical = true; // Min Stock is always critical
-      
+
       if (await this.shouldSendAlert(db, 'ALERT_MIN_STOCK', product.id, isCritical)) {
         await EmailService.sendLowStockAlert({
           to: recipients,
@@ -61,55 +67,55 @@ export const AlertService = {
 
     // 3. Check Unusual Consumption (WARNING or CRITICAL)
     if (settings.unusualConsumption && movementType === MovementType.OUT) {
-       const thresholdPercent = settings.consumptionThreshold || 25; // Default 25%
-       
-       // Calculate historical average for this specific movement size (heuristic)
-       // Or better: Compare this EXIT quantity vs Average Exit Quantity
-       const avgExitQuantity = this.calculateAverageExitQuantity(ctx.movements);
-       
-       if (avgExitQuantity > 0) {
-         const deviation = ((quantityChanged - avgExitQuantity) / avgExitQuantity) * 100;
-         
-         if (deviation >= thresholdPercent) {
-            const financialImpact = quantityChanged * Number(product.pmed);
-            const isCritical = financialImpact >= CRITICAL_FINANCIAL_IMPACT_THRESHOLD;
-            
-            if (isCritical) {
-              // Critical -> Send Immediately
-              if (await this.shouldSendAlert(db, 'ALERT_UNUSUAL_CONSUMPTION', product.id, true)) {
-                 await EmailService.sendUnusualConsumptionAlert({
-                   to: recipients,
-                   productName: product.description,
-                   quantity: quantityChanged,
-                   avgQuantity: avgExitQuantity,
-                   deviation,
-                   financialImpact,
-                   isCritical: true
-                 });
+      const thresholdPercent = settings.consumptionThreshold || 25; // Default 25%
 
-                 await this.logAlert(db, 'ALERT_UNUSUAL_CONSUMPTION', product.id, 'SEND_EMAIL', {
-                   quantity: quantityChanged,
-                   avg: avgExitQuantity,
-                   impact: financialImpact,
-                   severity: 'CRITICAL'
-                 });
-              }
-            } else {
-              // Warning -> Queue for Daily Digest
-              // We log it as 'QUEUE_DIGEST' so the daily job picks it up
-              // But we also enforce 24h spam check to not fill the digest with same warnings if not needed?
-              // Actually, digest should aggregate ALL warnings of the day.
-              
-              await this.logAlert(db, 'ALERT_UNUSUAL_CONSUMPTION', product.id, 'QUEUE_DIGEST', {
-                 quantity: quantityChanged,
-                 avg: avgExitQuantity,
-                 impact: financialImpact,
-                 severity: 'WARNING',
-                 productName: product.description // Store name for easier digest generation
+      // Calculate historical average for this specific movement size (heuristic)
+      // Or better: Compare this EXIT quantity vs Average Exit Quantity
+      const avgExitQuantity = this.calculateAverageExitQuantity(ctx.movements);
+
+      if (avgExitQuantity > 0) {
+        const deviation = ((quantityChanged - avgExitQuantity) / avgExitQuantity) * 100;
+
+        if (deviation >= thresholdPercent) {
+          const financialImpact = quantityChanged * Number(product.pmed);
+          const isCritical = financialImpact >= CRITICAL_FINANCIAL_IMPACT_THRESHOLD;
+
+          if (isCritical) {
+            // Critical -> Send Immediately
+            if (await this.shouldSendAlert(db, 'ALERT_UNUSUAL_CONSUMPTION', product.id, true)) {
+              await EmailService.sendUnusualConsumptionAlert({
+                to: recipients,
+                productName: product.description,
+                quantity: quantityChanged,
+                avgQuantity: avgExitQuantity,
+                deviation,
+                financialImpact,
+                isCritical: true
+              });
+
+              await this.logAlert(db, 'ALERT_UNUSUAL_CONSUMPTION', product.id, 'SEND_EMAIL', {
+                quantity: quantityChanged,
+                avg: avgExitQuantity,
+                impact: financialImpact,
+                severity: 'CRITICAL'
               });
             }
-         }
-       }
+          } else {
+            // Warning -> Queue for Daily Digest
+            // We log it as 'QUEUE_DIGEST' so the daily job picks it up
+            // But we also enforce 24h spam check to not fill the digest with same warnings if not needed?
+            // Actually, digest should aggregate ALL warnings of the day.
+
+            await this.logAlert(db, 'ALERT_UNUSUAL_CONSUMPTION', product.id, 'QUEUE_DIGEST', {
+              quantity: quantityChanged,
+              avg: avgExitQuantity,
+              impact: financialImpact,
+              severity: 'WARNING',
+              productName: product.description // Store name for easier digest generation
+            });
+          }
+        }
+      }
     }
   },
 
@@ -117,9 +123,9 @@ export const AlertService = {
     const now = new Date();
     const limitDate = new Date();
     limitDate.setDate(now.getDate() - days);
-    
-    const relevantMovements = movements.filter(m => 
-      m.type === MovementType.OUT && 
+
+    const relevantMovements = movements.filter(m =>
+      m.type === MovementType.OUT &&
       new Date(m.movementDate) >= limitDate
     );
 
@@ -147,7 +153,7 @@ export const AlertService = {
       .eq('action', 'IGNORE_ALERT')
       .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
       .limit(1);
-    
+
     if (ignored && ignored.length > 0) return false;
 
     // 2. Check for recent emails (Spam Control)
@@ -156,12 +162,48 @@ export const AlertService = {
       .select('created_at')
       .eq('entity', type)
       .eq('entity_id', productId)
-      .eq('action', 'SEND_EMAIL') 
+      .eq('action', 'SEND_EMAIL')
       .gte('created_at', oneDayAgo.toISOString())
       .limit(1)
       .maybeSingle();
 
     if (lastAlert) return false;
+
+    return true;
+  },
+
+  isWithinAlertWindow(settings: CompanySettings['alerts']): boolean {
+    if (!settings) return true;
+
+    // If no scheduling fields are set, assume always on
+    if (!settings.alertDays && !settings.alertStartTime && !settings.alertEndTime) {
+      return true;
+    }
+
+    const now = new Date();
+    const day = now.getDay(); // 0-6
+
+    // 1. Check Days of Week
+    if (settings.alertDays && settings.alertDays.length > 0) {
+      if (!settings.alertDays.includes(day)) return false;
+    }
+
+    // 2. Check Time Window
+    if (settings.alertStartTime && settings.alertEndTime) {
+      const currentTimeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+
+      // Handle overnight window (e.g., 22:00 to 06:00)
+      if (settings.alertStartTime > settings.alertEndTime) {
+        if (currentTimeStr < settings.alertStartTime && currentTimeStr > settings.alertEndTime) {
+          return false;
+        }
+      } else {
+        // Standard same-day window (e.g., 08:00 to 18:00)
+        if (currentTimeStr < settings.alertStartTime || currentTimeStr > settings.alertEndTime) {
+          return false;
+        }
+      }
+    }
 
     return true;
   },
@@ -197,7 +239,7 @@ export const AlertService = {
     // We look for logs created in the last 24h
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    
+
     const { data: queuedAlerts } = await db.supabase
       .from('audit_logs')
       .select('*')
@@ -209,7 +251,7 @@ export const AlertService = {
     // 3. Aggregate Data
     const company = await db.getCompanyById(companyId);
     if (!company) return;
-    
+
     const recipients: string[] = [];
     if (company.settings?.alerts?.alertEmails) {
       recipients.push(...company.settings.alertEmails.split(',').map((e: string) => e.trim()).filter((e: string) => e));
@@ -221,17 +263,17 @@ export const AlertService = {
     if (recipients.length === 0) return;
 
     const unusualConsumptions = queuedAlerts.filter((a: any) => a.entity === 'ALERT_UNUSUAL_CONSUMPTION');
-    
+
     // Also fetch current stock status for "Products at Risk" summary
     const products = await db.getProducts();
     const stockRisks = products.filter((p: Product) => {
-        // Simple risk check: stock <= minStock * 1.1 (Close to rupture)
-        // We can reuse calculateAverageConsumption logic if we had movements, 
-        // but for digest performance we might just check strict minStock
-        return Number(p.pmed) > 0 && p.minStock > 0 && 
-               // Assuming we can get stock quantity... db.getProducts doesn't return quantity.
-               // We need stock balances.
-               true; 
+      // Simple risk check: stock <= minStock * 1.1 (Close to rupture)
+      // We can reuse calculateAverageConsumption logic if we had movements, 
+      // but for digest performance we might just check strict minStock
+      return Number(p.pmed) > 0 && p.minStock > 0 &&
+        // Assuming we can get stock quantity... db.getProducts doesn't return quantity.
+        // We need stock balances.
+        true;
     });
 
     // Note: Fetching stock balances is heavy. 
@@ -239,28 +281,28 @@ export const AlertService = {
     // and maybe a quick query for critical items if possible.
     const balances = await db.getStockBalances();
     const riskyProducts = [];
-    
+
     for (const p of products) {
-        const bal = balances.find((b: any) => b.productId === p.id);
-        const qty = bal ? bal.quantity : 0;
-        if (qty <= Number(p.minStock)) {
-            riskyProducts.push({ name: p.description, qty, min: p.minStock });
-        }
+      const bal = balances.find((b: any) => b.productId === p.id);
+      const qty = bal ? bal.quantity : 0;
+      if (qty <= Number(p.minStock)) {
+        riskyProducts.push({ name: p.description, qty, min: p.minStock });
+      }
     }
 
     // 4. Send Email
     await EmailService.sendDailyDigest({
-        to: recipients,
-        date: today,
-        warnings: unusualConsumptions.map((a: any) => {
-            const d = JSON.parse(a.after_json || '{}');
-            return {
-                productName: d.productName || 'Produto Desconhecido',
-                deviation: ((d.quantity - d.avg) / d.avg) * 100,
-                impact: d.impact
-            };
-        }),
-        riskyProducts
+      to: recipients,
+      date: today,
+      warnings: unusualConsumptions.map((a: any) => {
+        const d = JSON.parse(a.after_json || '{}');
+        return {
+          productName: d.productName || 'Produto Desconhecido',
+          deviation: ((d.quantity - d.avg) / d.avg) * 100,
+          impact: d.impact
+        };
+      }),
+      riskyProducts
     });
 
     // 5. Log Success

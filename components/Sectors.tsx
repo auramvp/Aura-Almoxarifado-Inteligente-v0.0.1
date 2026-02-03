@@ -1,14 +1,16 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
 import { Sector, SectorPerson } from '../types';
-import { 
-  Plus, Edit, Trash2, X, Save, Users, Building2, 
-  Palette, UserPlus, UserMinus, Hash, User 
+import {
+  Plus, Edit, Trash2, X, Save, Users, Building2,
+  Palette, UserPlus, UserMinus, Hash, User
 } from 'lucide-react';
 
 const Sectors = ({ user }: any) => {
   const [sectors, setSectors] = useState<Sector[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSector, setEditingSector] = useState<Sector | null>(null);
   const [formData, setFormData] = useState({
@@ -30,6 +32,14 @@ const Sectors = ({ user }: any) => {
     loadSectors();
   }, []);
 
+  const filteredSectors = useMemo(() => {
+    return sectors.filter(s =>
+      s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.people.some(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+  }, [sectors, searchTerm]);
+
+  // handle functions ...
   const handleOpenModal = (s: Sector | null = null) => {
     if (s) {
       setEditingSector(s);
@@ -83,55 +93,124 @@ const Sectors = ({ user }: any) => {
     <div className="space-y-6">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Gestão de Setores</h2>
-          <p className="text-slate-500 dark:text-slate-400">Organize o almoxarifado por centros de custo e colaboradores.</p>
+          <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 uppercase tracking-tight">Gestão de Setores</h2>
+          <p className="text-slate-500 dark:text-slate-400 font-medium">Organize o almoxarifado por centros de custo e colaboradores.</p>
         </div>
         {canEdit && (
-          <button onClick={() => handleOpenModal()} className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-500/20">
+          <button onClick={() => handleOpenModal()} className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-500/20 active:scale-95">
             <Plus size={20} /> Novo Setor
           </button>
         )}
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {sectors.map(s => (
-          <div key={s.id} className="bg-white dark:bg-slate-900 rounded-[28px] border border-slate-200 dark:border-slate-800 p-6 shadow-sm hover:shadow-md transition-all group">
-            <div className="flex justify-between items-start mb-4">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-inner bg-slate-50 dark:bg-slate-800" style={{ borderLeft: `4px solid ${s.color}` }}>
-                  <Building2 className="text-slate-400" />
+      {/* Toolbar: Search and View Mode */}
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white dark:bg-slate-900 p-4 rounded-[24px] border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="relative flex-1 w-full">
+          <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input
+            type="text"
+            placeholder="Buscar setor ou colaborador..."
+            className="w-full pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-xl">
+          <button
+            onClick={() => setViewMode('grid')}
+            className={`p-2 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            <Plus size={18} className="rotate-45" /> {/* Using Plus rotated for grid-like feel if LayoutGrid not available or preferred */}
+            {/* Actually I'll use simple icons for Grid and List */}
+            <Building2 size={18} />
+          </button>
+          <button
+            onClick={() => setViewMode('list')}
+            className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            <Users size={18} />
+          </button>
+        </div>
+      </div>
+
+      {viewMode === 'grid' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredSectors.map(s => (
+            <div key={s.id} className="bg-white dark:bg-slate-900 rounded-[24px] border border-slate-200 dark:border-slate-800 p-4 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-10">
+                <button onClick={() => handleOpenModal(s)} className="p-1.5 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-sm text-slate-400 hover:text-blue-600 rounded-lg transition-all"><Edit size={14} /></button>
+                <button onClick={() => handleDelete(s.id)} className="p-1.5 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-sm text-slate-400 hover:text-red-500 rounded-lg transition-all"><Trash2 size={14} /></button>
+              </div>
+
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl bg-slate-50 dark:bg-slate-800 shrink-0" style={{ borderLeft: `3px solid ${s.color}` }}>
+                  <Building2 className="text-slate-400" size={18} />
                 </div>
-                <div>
-                  <h3 className="text-lg font-black text-slate-800 dark:text-slate-100">{s.name}</h3>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: s.color }} />
-                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{s.people.length} Colaboradores</span>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 truncate">{s.name}</h3>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                    <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">{s.people.length} Pessoas</span>
                   </div>
                 </div>
               </div>
-              {canEdit && (
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => handleOpenModal(s)} className="p-2 text-slate-400 hover:text-blue-600 transition"><Edit size={18} /></button>
-                  <button onClick={() => handleDelete(s.id)} className="p-2 text-slate-400 hover:text-red-600 transition"><Trash2 size={18} /></button>
-                </div>
-              )}
-            </div>
 
-            <div className="space-y-2 mt-4 max-h-32 overflow-y-auto pr-2 custom-scrollbar">
-              {s.people.map((p, i) => (
-                <div key={i} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
-                  <div className="flex items-center gap-2 overflow-hidden">
-                    <User size={12} className="text-slate-400 shrink-0" />
-                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300 truncate">{p.name}</span>
+              <div className="flex -space-x-2 overflow-hidden mb-2">
+                {s.people.slice(0, 5).map((p, i) => (
+                  <div key={i} title={p.name} className="w-7 h-7 rounded-full bg-blue-600 border-2 border-white dark:border-slate-900 flex items-center justify-center text-[10px] font-black text-white uppercase shadow-sm">
+                    {p.name.charAt(0)}
                   </div>
-                  <span className="text-[10px] font-mono font-black text-blue-500 px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/30 rounded shrink-0">{p.matricula}</span>
-                </div>
-              ))}
-              {s.people.length === 0 && <p className="text-center py-4 text-xs text-slate-400 italic">Sem pessoas vinculadas</p>}
+                ))}
+                {s.people.length > 5 && (
+                  <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 border-2 border-white dark:border-slate-900 flex items-center justify-center text-[8px] font-black text-slate-500">
+                    +{s.people.length - 5}
+                  </div>
+                )}
+                {s.people.length === 0 && <span className="text-[10px] text-slate-400 italic font-medium ml-2">Nenhum colaborador</span>}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="bg-white dark:bg-slate-900 rounded-[28px] border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-slate-50 dark:bg-slate-800/50">
+                <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Setor</th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Colaboradores</th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {filteredSectors.map(s => (
+                <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-2 h-8 rounded-full" style={{ backgroundColor: s.color }} />
+                      <span className="font-bold text-slate-700 dark:text-slate-200">{s.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-wrap gap-1.5">
+                      {s.people.map((p, i) => (
+                        <span key={i} className="text-[10px] font-bold px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-lg border border-slate-200 dark:border-slate-700">
+                          {p.name}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => handleOpenModal(s)} className="p-2 text-slate-400 hover:text-blue-600 transition-all hover:bg-white dark:hover:bg-slate-700 rounded-xl shadow-sm"><Edit size={16} /></button>
+                      <button onClick={() => handleDelete(s.id)} className="p-2 text-slate-400 hover:text-red-600 transition-all hover:bg-white dark:hover:bg-slate-700 rounded-xl shadow-sm"><Trash2 size={16} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm">
@@ -149,26 +228,26 @@ const Sectors = ({ user }: any) => {
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1 mb-2 block">Identificação do Setor</label>
                   <div className="flex gap-4">
                     <div className="flex-1">
-                      <input required type="text" className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Nome do Setor (Ex: Manutenção)" />
+                      <input required type="text" className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Nome do Setor (Ex: Manutenção)" />
                     </div>
                     <div className="w-20 shrink-0">
-                      <input type="color" className="w-full h-full p-2 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl cursor-pointer" value={formData.color} onChange={e => setFormData({...formData, color: e.target.value})} />
+                      <input type="color" className="w-full h-full p-2 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl cursor-pointer" value={formData.color} onChange={e => setFormData({ ...formData, color: e.target.value })} />
                     </div>
                   </div>
                 </div>
 
                 <div className="col-span-2 space-y-4">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1 block">Colaboradores do Setor</label>
-                  
+
                   <div className="flex gap-3 bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl">
                     <div className="flex-1 space-y-2">
                       <div className="relative">
                         <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input type="text" className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-900 border-none rounded-xl text-sm font-bold outline-none" placeholder="Nome do Colaborador" value={newPerson.name} onChange={e => setNewPerson({...newPerson, name: e.target.value})} />
+                        <input type="text" className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-900 border-none rounded-xl text-sm font-bold outline-none" placeholder="Nome do Colaborador" value={newPerson.name} onChange={e => setNewPerson({ ...newPerson, name: e.target.value })} />
                       </div>
                       <div className="relative">
                         <Hash size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input type="text" className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-900 border-none rounded-xl text-sm font-black outline-none" placeholder="Matrícula / ID" value={newPerson.matricula} onChange={e => setNewPerson({...newPerson, matricula: e.target.value})} />
+                        <input type="text" className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-900 border-none rounded-xl text-sm font-black outline-none" placeholder="Matrícula / ID" value={newPerson.matricula} onChange={e => setNewPerson({ ...newPerson, matricula: e.target.value })} />
                       </div>
                     </div>
                     <button type="button" onClick={handleAddPerson} className="px-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition flex items-center justify-center">

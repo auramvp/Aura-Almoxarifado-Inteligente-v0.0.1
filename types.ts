@@ -4,6 +4,24 @@ export enum UserRole {
   AUX_ALMOXARIFE = 'AUX_ALMOXARIFE'
 }
 
+export type CompanyStatus = 'active' | 'suspended' | 'blocked';
+
+export interface SupportTicket {
+  id: string;
+  companyId: string;
+  userId: string;
+  userName: string;
+  companyName: string;
+  description: string;
+  status: string;
+  createdAt: string;
+  resolution?: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+  startedAt?: string;
+  startedBy?: string;
+}
+
 export type PermissionLevel = 'none' | 'view' | 'full';
 
 export interface UserPermissions {
@@ -41,6 +59,8 @@ export interface Company {
   sectorEmail: string;
   contactExtra?: string;
   settings?: CompanySettings;
+  status: CompanyStatus;
+  suspensionReason?: string;
   createdAt: string;
 }
 
@@ -51,6 +71,9 @@ export interface CompanySettings {
     unusualConsumption: boolean;
     consumptionThreshold: number;
     alertEmails?: string; // Comma separated emails
+    alertDays?: number[]; // 0-6
+    alertStartTime?: string; // HH:mm
+    alertEndTime?: string; // HH:mm
   };
 }
 
@@ -125,38 +148,6 @@ export interface AiReportABCItem {
   percentage: number;
 }
 
-export interface AiReportPayload {
-  company: {
-    name: string;
-    cnpj: string;
-    sector: string;
-  };
-  period: {
-    start: string;
-    end: string;
-  };
-  kpis: {
-    total_items: number;
-    critical_stock_items: number;
-    excess_stock_items: number;
-    dead_stock_items_90d: number;
-    current_inventory_value: number;
-    total_purchases_period: number;
-    total_exits_period: number;
-  };
-  alerts: AiReportAlert[];
-  abc: {
-    curve_a: AiReportABCItem[];
-    curve_b: AiReportABCItem[];
-    curve_c: AiReportABCItem[];
-  };
-  dead_stock: AiReportDeadStock[];
-  rules: {
-    min_stock_method: string;
-    dead_stock_days: number;
-  };
-}
-
 export interface Category {
   id: string;
   companyId: string;
@@ -188,9 +179,9 @@ export interface Product {
   minStock: number;
   categoryId?: string;
   defaultSupplierId?: string;
-  storageLocation?: string; 
-  observations?: string; 
-  pmed: number; 
+  storageLocation?: string;
+  observations?: string;
+  pmed: number;
   active: boolean;
   createdAt: string;
   updatedAt: string;
@@ -236,7 +227,7 @@ export interface StockMovement {
   invoiceNumber?: string;
   fromLocationId?: string;
   toLocationId?: string;
-  destination?: string; 
+  destination?: string;
   pmedAtTime: number;
   demand?: number;
   notes?: string;
@@ -275,7 +266,7 @@ export interface DashboardStats {
   aiInsight?: { title: string; content: string; type: 'success' | 'warning' | 'info' };
 }
 
-// AI Report Types
+// AI Report Payload
 export interface AiReportPayload {
   company: {
     name: string;

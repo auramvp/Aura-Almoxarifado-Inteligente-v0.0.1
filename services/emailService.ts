@@ -44,6 +44,13 @@ export interface OptimizationReportPayload {
   period: string;
 }
 
+export interface AlertSchedulePayload {
+  to: string | string[];
+  days: string[];
+  startTime: string;
+  endTime: string;
+}
+
 const formatCurrency = (val: number) => {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 };
@@ -60,7 +67,7 @@ const generateEmailTemplate = (title: string, content: string, accentColor: stri
   const logoUrl = "https://zdgapmcalocdvdgvbwsj.supabase.co/storage/v1/object/public/AuraLogo/branco.png";
   // Generate a unique ID for this email instance to prevent Gmail from collapsing it as duplicate content
   const emailId = Math.random().toString(36).substring(2, 10);
-  
+
   return `
     <!DOCTYPE html>
     <html lang="pt-BR">
@@ -123,8 +130,8 @@ export const EmailService = {
 
     // Ensure we use the correct sender
     const finalPayload = {
-        ...payload,
-        from: payload.from || 'Aura Almoxarife <time@auraalmoxarifado.com.br>'
+      ...payload,
+      from: payload.from || 'Aura Almoxarife <time@auraalmoxarifado.com.br>'
     };
 
     // 1. Tentar via Supabase Edge Function (Recomendado para Produção)
@@ -147,22 +154,22 @@ export const EmailService = {
 
     // 2. Tentativa via Proxy Local (Correção de CORS em Dev)
     try {
-        console.log('[EmailService] Tentando via Proxy Local (port 3001)...');
-        const res = await fetch('http://localhost:3001/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(finalPayload)
-        });
-        
-        if (res.ok) {
-            const data = await res.json();
-            console.log('[EmailService] Email enviado via Proxy Local!', data);
-            return { success: true, data };
-        } else {
-             console.warn('[EmailService] Proxy Local retornou erro:', res.status);
-        }
+      console.log('[EmailService] Tentando via Proxy Local (port 3001)...');
+      const res = await fetch('http://localhost:3001/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(finalPayload)
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        console.log('[EmailService] Email enviado via Proxy Local!', data);
+        return { success: true, data };
+      } else {
+        console.warn('[EmailService] Proxy Local retornou erro:', res.status);
+      }
     } catch (err) {
-        console.warn('[EmailService] Proxy local não disponível (provavelmente não iniciado).');
+      console.warn('[EmailService] Proxy local não disponível (provavelmente não iniciado).');
     }
 
     // 3. Fallback: Tentativa direta (Pode falhar por CORS)
@@ -189,12 +196,12 @@ export const EmailService = {
       } catch (err: any) {
         console.error('[EmailService] Erro crítico no envio direto:', err);
         if (err.message?.includes('Failed to fetch') || err.name === 'TypeError') {
-             throw new Error("Erro de conexão. Verifique se o Proxy Local está rodando (npm run proxy) ou se a Edge Function está ativa.");
+          throw new Error("Erro de conexão. Verifique se o Proxy Local está rodando (npm run proxy) ou se a Edge Function está ativa.");
         }
         throw err;
       }
     } else {
-        throw new Error("VITE_RESEND_API_KEY não configurada e Supabase Function falhou.");
+      throw new Error("VITE_RESEND_API_KEY não configurada e Supabase Function falhou.");
     }
   },
 
@@ -281,7 +288,7 @@ export const EmailService = {
   async sendDailyDigest(payload: DailyDigestPayload) {
     const subject = `📋 Resumo Diário - ${payload.date}`;
     const accentColor = '#2563eb'; // Brand Blue
-    
+
     // Generate Rows for Warnings
     const warningRows = payload.warnings.map(w => `
       <tr style="border-bottom: 1px solid #e5e7eb;">
@@ -355,6 +362,47 @@ export const EmailService = {
     `;
 
     const html = generateEmailTemplate('Relatório de Otimização', content, accentColor);
+    return this.sendEmail({ to: payload.to, subject, html });
+  },
+
+  async sendAlertScheduleConfirmation(payload: AlertSchedulePayload) {
+    const subject = `✅ Agendamento de Alertas Atualizado`;
+    const accentColor = '#4f46e5'; // Indigo/Aura
+
+    const content = `
+      <p style="margin-top: 0; font-size: 16px; line-height: 1.6; color: #374151;">
+        Olá! A programação para recebimento de alertas por e-mail foi atualizada com sucesso.
+      </p>
+
+      <div style="background-color: #f3f4f6; border-radius: 12px; padding: 24px; margin: 24px 0;">
+        <h4 style="margin: 0 0 16px 0; font-size: 14px; text-transform: uppercase; color: #6b7280; letter-spacing: 0.5px;">Nova Programação</h4>
+        
+        <div style="margin-bottom: 20px;">
+          <p style="margin: 0; font-size: 12px; color: #9ca3af; text-transform: uppercase; font-weight: 700;">Dias Ativos</p>
+          <p style="margin: 4px 0 0; font-size: 16px; font-weight: 700; color: #1f2937;">${payload.days.join(', ')}</p>
+        </div>
+
+        <div>
+          <p style="margin: 0; font-size: 12px; color: #9ca3af; text-transform: uppercase; font-weight: 700;">Janela de Horário</p>
+          <p style="margin: 4px 0 0; font-size: 16px; font-weight: 700; color: #1f2937;">Das ${payload.startTime} às ${payload.endTime}</p>
+        </div>
+      </div>
+
+      <p style="font-size: 14px; color: #6b7280; line-height: 1.5;">
+        A partir de agora, as seguintes notificações serão enviadas apenas dentro deste período:
+      </p>
+
+      <ul style="font-size: 14px; color: #374151; line-height: 1.6; padding-left: 20px;">
+        <li><strong>Alerta Crítico:</strong> Notificações de ruptura iminente de estoque.</li>
+        <li><strong>Consumo Anômalo:</strong> Detecção de saídas fora do padrão pela IA.</li>
+      </ul>
+
+      <p style="font-size: 14px; color: #6b7280; line-height: 1.5; margin-top: 16px;">
+        Fora deste horário, as notificações serão retidas e enviadas assim que a janela permitida iniciar.
+      </p>
+    `;
+
+    const html = generateEmailTemplate('Agendamento Confirmado', content, accentColor);
     return this.sendEmail({ to: payload.to, subject, html });
   }
 };
