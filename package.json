@@ -12,6 +12,7 @@
   "dependencies": {
     "@google/genai": "^1.38.0",
     "@supabase/supabase-js": "^2.48.1",
+    "@types/three": "^0.182.0",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
@@ -26,6 +27,7 @@
     "recharts": "^2.15.0",
     "remark-gfm": "^4.0.1",
     "resend": "^6.9.1",
+    "three": "^0.182.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

@@ -23,6 +23,7 @@ import ImportData from './components/ImportExport.tsx';
 import Support from './components/Support.tsx';
 import Purchases from './components/Purchases.tsx';
 import Settings from './components/Settings.tsx';
+import AuraBackground from './components/ui/AuraBackground.tsx';
 
 const Logo = ({ collapsed, size = 'md' }: { collapsed: boolean; size?: 'sm' | 'md' | 'lg' }) => {
   const sizes = {
@@ -67,12 +68,13 @@ const Logo = ({ collapsed, size = 'md' }: { collapsed: boolean; size?: 'sm' | 'm
 };
 
 const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
-  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgotPassword'>('login');
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgotPassword' | 'onboarding'>('login');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [registerStep, setRegisterStep] = useState(1);
+  const [onboardingStep, setOnboardingStep] = useState(1);
 
   const [formData, setFormData] = useState({ name: '', email: '', password: '', accessCode: '', magicEmail: '' });
   const [registerData, setRegisterData] = useState({ name: '', email: '', password: '', confirmPassword: '', companyName: '', cnpj: '', address: '', phone: '', contactEmail: '' });
@@ -86,16 +88,23 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
   }, []);
 
   useEffect(() => {
-    // 1. Check Search Params (Query)
-    const searchParams = new URLSearchParams(window.location.search);
-    const emailParam = searchParams.get('email');
+    // 1. Check Search and Hash Params (Query)
+    const searchParams = new URL(window.location.href).searchParams;
+    const hashParamsFromUrl = new URLSearchParams(window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '');
+
+    const emailParam = searchParams.get('email') || hashParamsFromUrl.get('email');
+    const flowParam = searchParams.get('flow');
+
     if (emailParam) {
       setAuthMode('register');
       setRegisterData(prev => ({ ...prev, email: emailParam }));
       checkSubscription(emailParam);
+    } else if (flowParam === 'onboarding') {
+      setAuthMode('onboarding');
+      setOnboardingStep(1);
     }
 
-    // 2. Check Hash Params (Auth Errors/Callbacks)
+    // 2. Check Auth Errors/Callbacks
     const hash = window.location.hash.substring(1);
     const hashParams = new URLSearchParams(hash);
     const errorCode = hashParams.get('error_code');
@@ -123,8 +132,16 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
     setLoading(true);
     try {
       const hasSub = await db.hasActiveSubscription(email);
-      setRegisterStep(hasSub ? 1 : 0);
-    } catch (err) { setRegisterStep(0); } finally { setLoading(false); }
+      if (authMode === 'onboarding') {
+        if (hasSub) setOnboardingStep(2);
+        else setError("Nenhuma assinatura ativa encontrada para este e-mail.");
+      } else {
+        setRegisterStep(hasSub ? 1 : 0);
+      }
+    } catch (err) {
+      if (authMode === 'onboarding') setError("Erro ao verificar assinatura.");
+      else setRegisterStep(0);
+    } finally { setLoading(false); }
   };
 
   const passwordStrength = useMemo(() => {
@@ -190,20 +207,38 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (registerStep === 0) return;
-    if (registerStep === 1) {
-      if (registerData.password !== registerData.confirmPassword) { setError("Senhas não coincidem."); return; }
-      if (passwordStrength < 3) { setError("Senha muito fraca."); return; }
-      setRegisterStep(2); setError(null);
+
+    if (authMode === 'onboarding') {
+      if (onboardingStep === 2) {
+        if (registerData.password !== registerData.confirmPassword) { setError("Senhas não coincidem."); return; }
+        if (passwordStrength < 3) { setError("Senha muito fraca."); return; }
+        setOnboardingStep(3); setError(null);
+      } else if (onboardingStep === 3) {
+        setLoading(true); setError(null);
+        try {
+          const user = await db.register(
+            { name: registerData.name, email: registerData.email, password: registerData.password },
+            { cnpj: registerData.cnpj.replace(/\D/g, ''), name: registerData.companyName, address: registerData.address, email: registerData.contactEmail, phone: registerData.phone, sectorName: 'Geral', sectorResponsible: registerData.name }
+          );
+          onLogin(user);
+        } catch (err: any) { setError("Erro ao criar conta."); } finally { setLoading(false); }
+      }
     } else {
-      setLoading(true); setError(null);
-      try {
-        const user = await db.register(
-          { name: registerData.name, email: registerData.email, password: registerData.password },
-          { cnpj: registerData.cnpj.replace(/\D/g, ''), name: registerData.companyName, address: registerData.address, email: registerData.contactEmail, phone: registerData.phone, sectorName: 'Geral', sectorResponsible: registerData.name }
-        );
-        onLogin(user);
-      } catch (err: any) { setError("Erro ao criar conta."); } finally { setLoading(false); }
+      if (registerStep === 0) return;
+      if (registerStep === 1) {
+        if (registerData.password !== registerData.confirmPassword) { setError("Senhas não coincidem."); return; }
+        if (passwordStrength < 3) { setError("Senha muito fraca."); return; }
+        setRegisterStep(2); setError(null);
+      } else {
+        setLoading(true); setError(null);
+        try {
+          const user = await db.register(
+            { name: registerData.name, email: registerData.email, password: registerData.password },
+            { cnpj: registerData.cnpj.replace(/\D/g, ''), name: registerData.companyName, address: registerData.address, email: registerData.contactEmail, phone: registerData.phone, sectorName: 'Geral', sectorResponsible: registerData.name }
+          );
+          onLogin(user);
+        } catch (err: any) { setError("Erro ao criar conta."); } finally { setLoading(false); }
+      }
     }
   };
 
@@ -227,11 +262,8 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
   const inputClass = "w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-sm transition-all";
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4 relative overflow-hidden">
-      <div className="absolute inset-0 pointer-events-none opacity-40 dark:opacity-20" style={{ background: `radial-gradient(800px circle at ${mousePos.x}px ${mousePos.y}px, rgba(37, 99, 235, 0.12), transparent 80%)` }} />
-      <div className="absolute inset-0 pointer-events-none opacity-10">
-        <div className="absolute top-0 left-0 w-full h-full" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(100, 116, 139, 0.2) 1px, transparent 0)', backgroundSize: '32px 32px' }} />
-      </div>
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+      <AuraBackground />
 
       <div className="w-full max-w-sm space-y-4 relative z-10 animate-in fade-in zoom-in duration-700">
         <div className="flex justify-center mb-1"><Logo collapsed={false} size="lg" /></div>
@@ -258,7 +290,18 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
                   {registerStep === 1 ? (
                     <div className="space-y-3">
                       <div className="relative"><UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="Nome Completo" className={inputClass} value={registerData.name} onChange={e => setRegisterData({ ...registerData, name: e.target.value })} /></div>
-                      <div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="email" placeholder="E-mail" disabled className={inputClass + " opacity-60 cursor-not-allowed"} value={registerData.email} /></div>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                          required
+                          type="email"
+                          placeholder="E-mail da Compra"
+                          className={inputClass + (registerData.email ? " opacity-60 cursor-not-allowed" : "")}
+                          value={registerData.email}
+                          onChange={e => !registerData.email && setRegisterData({ ...registerData, email: e.target.value })}
+                          onBlur={() => registerData.email && checkSubscription(registerData.email)}
+                        />
+                      </div>
                       <div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="password" placeholder="Senha" className={inputClass} value={registerData.password} onChange={e => setRegisterData({ ...registerData, password: e.target.value })} /></div>
                       <div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="password" placeholder="Confirmar Senha" className={inputClass} value={registerData.confirmPassword} onChange={e => setRegisterData({ ...registerData, confirmPassword: e.target.value })} /></div>
                     </div>
@@ -275,6 +318,62 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
                   </div>
                 </form>
               )}
+            </div>
+          ) : authMode === 'onboarding' ? (
+            <div className="p-6">
+              <form onSubmit={e => { e.preventDefault(); if (onboardingStep === 1) checkSubscription(registerData.email); else handleRegister(e); }} className="space-y-4">
+                <div className="flex justify-between items-end">
+                  <h3 className="text-lg font-bold">Configurar Acesso</h3>
+                  <span className="text-[10px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-full uppercase tracking-widest">Etapa {onboardingStep}/3</span>
+                </div>
+
+                {error && <div className="p-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-bold border border-red-100 flex items-center gap-2 animate-in slide-in-from-top-1"><AlertCircle size={14} /> {error}</div>}
+
+                {onboardingStep === 1 ? (
+                  <div className="space-y-4">
+                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 rounded-xl">
+                      <p className="text-[10px] leading-relaxed text-blue-700 dark:text-blue-300 font-medium">
+                        <span className="font-black uppercase block mb-1">Aviso Importante</span>
+                        Insira o e-mail que você utilizou no momento da compra na <strong>Cakto Pay</strong>. Precisamos dele para validar sua assinatura ativa.
+                      </p>
+                    </div>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                      <input
+                        required
+                        type="email"
+                        placeholder="E-mail da Compra"
+                        className={inputClass}
+                        value={registerData.email}
+                        onChange={e => setRegisterData({ ...registerData, email: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                ) : onboardingStep === 2 ? (
+                  <div className="space-y-3">
+                    <div className="relative"><UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="Seu Nome Completo" className={inputClass} value={registerData.name} onChange={e => setRegisterData({ ...registerData, name: e.target.value })} /></div>
+                    <div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="password" placeholder="Criar Senia" className={inputClass} value={registerData.password} onChange={e => setRegisterData({ ...registerData, password: e.target.value })} /></div>
+                    <div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="password" placeholder="Confirmar Senha" className={inputClass} value={registerData.confirmPassword} onChange={e => setRegisterData({ ...registerData, confirmPassword: e.target.value })} /></div>
+                    <div className="flex gap-1 px-1">
+                      {[1, 2, 3, 4].map((s) => (
+                        <div key={s} className={`h-1 flex-1 rounded-full transition-all duration-500 ${s <= passwordStrength ? strengthColor : 'bg-slate-100 dark:bg-slate-800'}`} />
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="relative"><Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="CNPJ da Empresa" className={inputClass} value={registerData.cnpj} onChange={e => setRegisterData({ ...registerData, cnpj: formatCNPJ(e.target.value) })} onBlur={handleCNPJBlur} />{loading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-blue-600" size={16} />}</div>
+                    <div className="relative"><Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="Nome Fantasia" className={inputClass} value={registerData.companyName} onChange={e => setRegisterData({ ...registerData, companyName: e.target.value })} /></div>
+                    <div className="relative"><MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="Endereço Completo" className={inputClass} value={registerData.address} onChange={e => setRegisterData({ ...registerData, address: e.target.value })} /></div>
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  {onboardingStep > 1 && <button type="button" onClick={() => setOnboardingStep(prev => prev - 1)} className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-xl font-bold uppercase text-[10px] tracking-widest active:scale-95 transition-all">Voltar</button>}
+                  <button type="submit" disabled={loading} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg shadow-blue-500/20 active:scale-95 transition-all">{loading ? <Loader2 className="animate-spin mx-auto" size={16} /> : onboardingStep < 3 ? 'Continuar' : 'Finalizar Cadastro'}</button>
+                </div>
+                {onboardingStep === 1 && <button type="button" onClick={() => setAuthMode('login')} className="w-full text-slate-400 font-bold text-[10px] uppercase tracking-widest">Já tenho conta? Entrar</button>}
+              </form>
             </div>
           ) : authMode === 'forgotPassword' ? (
             <div className="p-6 space-y-4">
@@ -307,9 +406,12 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
                 </form>
               </div>
 
-              <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-100 dark:border-slate-800">
-                <button onClick={() => setAuthMode('forgotPassword')} className="text-slate-400 hover:text-blue-600 text-[9px] font-black uppercase tracking-widest transition-colors">Esqueci Senha</button>
-                <button onClick={() => window.open('https://auraalmoxarifado.com.br', '_blank')} className="text-slate-400 hover:text-blue-600 text-[9px] font-black uppercase tracking-widest transition-colors ml-auto">Assinar</button>
+              <div className="flex flex-col gap-3 pt-4 mt-4 border-t border-slate-100 dark:border-slate-800">
+                <button onClick={() => setAuthMode('register')} className="w-full py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all hover:bg-blue-100">Já sou assinante: Criar Conta</button>
+                <div className="flex items-center justify-between">
+                  <button onClick={() => setAuthMode('forgotPassword')} className="text-slate-400 hover:text-blue-600 text-[9px] font-black uppercase tracking-widest transition-colors">Esqueci Senha</button>
+                  <button onClick={() => window.open('https://auraalmoxarifado.com.br', '_blank')} className="text-slate-400 hover:text-blue-600 text-[9px] font-black uppercase tracking-widest transition-colors">Assinar</button>
+                </div>
               </div>
             </div>
           )}

@@ -404,5 +404,38 @@ export const EmailService = {
 
     const html = generateEmailTemplate('Agendamento Confirmado', content, accentColor);
     return this.sendEmail({ to: payload.to, subject, html });
+  },
+
+  async sendRegistrationLink(email: string) {
+    const subject = `🚀 Comece a usar a Aura - Almoxarifado Inteligente`;
+    const accentColor = '#2563eb';
+    const registrationLink = `https://app.auraalmoxarifado.com.br/?email=${encodeURIComponent(email)}`;
+
+    const content = `
+      <p style="margin-top: 0; font-size: 16px; line-height: 1.6; color: #374151;">
+        Olá! Sua assinatura Aura foi confirmada. Agora falta pouco para você começar a otimizar seu almoxarifado.
+      </p>
+
+      <div style="text-align: center; margin: 32px 0;">
+        <a href="${registrationLink}" style="background-color: #2563eb; color: #ffffff; padding: 16px 32px; border-radius: 12px; font-weight: 800; text-decoration: none; display: inline-block; text-transform: uppercase; font-size: 14px; letter-spacing: 1px; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);">
+          Finalizar Meu Cadastro
+        </a>
+      </div>
+
+      <p style="font-size: 14px; color: #6b7280; line-height: 1.5;">
+        Este link é exclusivo para o seu e-mail: <strong>${email}</strong>. Ao clicar, seus dados de acesso já estarão pré-preenchidos para sua segurança.
+      </p>
+
+      <div style="background-color: #f3f4f6; border-radius: 12px; padding: 20px; margin-top: 24px;">
+        <p style="margin: 0; font-size: 13px; color: #374151;">
+          <strong>Dica:</strong> Se o botão acima não funcionar, copie e cole o link abaixo no seu navegador:
+          <br/>
+          <span style="color: #2563eb; word-break: break-all;">${registrationLink}</span>
+        </p>
+      </div>
+    `;
+
+    const html = generateEmailTemplate('Convite de Cadastro', content, accentColor);
+    return this.sendEmail({ to: email, subject, html });
   }
 };
