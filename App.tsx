@@ -27,8 +27,8 @@ import Settings from './components/Settings.tsx';
 const Logo = ({ collapsed, size = 'md' }: { collapsed: boolean; size?: 'sm' | 'md' | 'lg' }) => {
   const sizes = {
     sm: { icon: 14, text: 'text-base', box: 'p-1 rounded-lg', sub: 'text-[6px]' },
-    md: { icon: 32, text: 'text-5xl', box: 'p-3 rounded-[24px]', sub: 'text-[7.5px]' },
-    lg: { icon: 36, text: 'text-6xl', box: 'p-4 rounded-[28px]', sub: 'text-[11px]' }
+    md: { icon: 32, text: 'text-5xl', box: 'p-3 rounded-[24px]', sub: 'text-[6.5px]' },
+    lg: { icon: 36, text: 'text-6xl', box: 'p-4 rounded-[28px]', sub: 'text-[9.5px]' }
   };
 
   return (
@@ -57,7 +57,7 @@ const Logo = ({ collapsed, size = 'md' }: { collapsed: boolean; size?: 'sm' | 'm
           <span className={`font-black tracking-tight text-white ${sizes[size].text}`}>
             Aura
           </span>
-          <span className={`font-bold uppercase tracking-[0.02em] text-[#94A3B8] ${sizes[size].sub} mt-1 whitespace-nowrap`}>
+          <span className={`font-bold uppercase tracking-tighter text-[#94A3B8] ${sizes[size].sub} mt-1 whitespace-nowrap`}>
             Almoxarifado Inteligente
           </span>
         </div>
@@ -309,7 +309,7 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
 
               <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-100 dark:border-slate-800">
                 <button onClick={() => setAuthMode('forgotPassword')} className="text-slate-400 hover:text-blue-600 text-[9px] font-black uppercase tracking-widest transition-colors">Esqueci Senha</button>
-                <button onClick={() => window.open('https://cakto.com.br/aura/assinar', '_blank')} className="text-slate-400 hover:text-blue-600 text-[9px] font-black uppercase tracking-widest transition-colors ml-auto">Assinar</button>
+                <button onClick={() => window.open('https://auraalmoxarifado.com.br', '_blank')} className="text-slate-400 hover:text-blue-600 text-[9px] font-black uppercase tracking-widest transition-colors ml-auto">Assinar</button>
               </div>
             </div>
           )}
