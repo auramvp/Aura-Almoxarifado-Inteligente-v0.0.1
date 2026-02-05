@@ -61,6 +61,7 @@ export interface Company {
   settings?: CompanySettings;
   status: CompanyStatus;
   suspensionReason?: string;
+  planId?: string;
   createdAt: string;
 }
 

@@ -328,6 +328,7 @@ export const db = {
       settings: data.settings,
       status: data.status || 'active',
       suspensionReason: data.suspension_reason,
+      planId: data.plan_id,
       createdAt: data.created_at
     };
   },
@@ -336,7 +337,8 @@ export const db = {
     const company = await this.getCompanyById(companyId);
     if (!company) return null;
 
-    const { data: sub, error } = await supabase
+    // 1. Try to get subscription data (for status, billing etc)
+    const { data: sub } = await supabase
       .from('subscriptions')
       .select('*')
       .or(`company_id.eq.${companyId},cnpj.eq.${company?.cnpj}`)
@@ -345,32 +347,35 @@ export const db = {
       .limit(1)
       .single();
 
-    if (error || !sub) return null;
-
+    // 2. Resolve Plan details (Priority: company.planId > subscription.plan_id > subscription.plan name)
     let planData = null;
-    if (sub.plan) {
-      const { data: plan } = await supabase
-        .from('plans')
-        .select('*')
-        .eq('name', sub.plan)
-        .single();
+    if (company.planId) {
+      const { data: plan } = await supabase.from('plans').select('*').eq('id', company.planId).single();
+      planData = plan;
+    } else if (sub?.plan_id) {
+      const { data: plan } = await supabase.from('plans').select('*').eq('id', sub.plan_id).single();
+      planData = plan;
+    } else if (sub?.plan) {
+      const { data: plan } = await supabase.from('plans').select('*').eq('name', sub.plan).single();
       planData = plan;
     }
 
+    if (!planData && !sub) return null;
+
     return {
-      id: sub.id,
-      companyId: sub.company_id || companyId,
-      planId: sub.plan_id || '',
-      status: (sub.status === 'Ativo' ? 'active' : sub.status) as any,
-      startDate: sub.created_at,
-      nextBillingDate: sub.next_billing || sub.next_billing_date,
-      paymentMethod: sub.payment_method,
+      id: sub?.id || 'manual-' + companyId,
+      companyId: companyId,
+      planId: planData?.id || sub?.plan_id || '',
+      status: (sub?.status === 'Ativo' ? 'active' : sub?.status || 'active') as any,
+      startDate: sub?.created_at || company.createdAt,
+      nextBillingDate: sub?.next_billing || sub?.next_billing_date || '',
+      paymentMethod: sub?.payment_method || 'PIX',
       plan: {
         id: planData?.id || '',
-        name: sub.plan || 'Plano Personalizado',
+        name: planData?.name || sub?.plan || 'Plano Personalizado',
         maxUsers: planData?.max_users || 999,
         maxItems: planData?.max_items || 9999,
-        price: Number(sub.value || planData?.value || 0),
+        price: Number(sub?.value || planData?.value || 0),
         interval: 'monthly',
         features: planData?.description ? [planData.description] : [],
         active: true
@@ -677,8 +682,8 @@ export const db = {
 
     const sub = await this.getSubscription(user.companyId);
     if (sub?.plan) {
-      const products = await this.getProducts();
-      if (products.length >= sub.plan.maxItems) {
+      const count = await this.getProductsCount(user.companyId);
+      if (count >= sub.plan.maxItems) {
         throw new Error(`Limite de produtos atingido para o seu plano (${sub.plan.maxItems}).`);
       }
     }
@@ -983,10 +988,16 @@ export const db = {
 
   async canAccessModule(companyId: string, moduleId: SystemModule): Promise<boolean> {
     const sub = await this.getSubscription(companyId);
-    if (!sub?.plan?.features) return false;
+    if (!sub?.plan?.features || sub.plan.features.length === 0) {
+      // Basic plans might not have explicit features in description yet, 
+      // but 'inventory' is usually basic.
+      if (moduleId === 'inventory') return true;
+      return false;
+    }
+
     return sub.plan.features.some(feature => {
+      if (feature === 'Ilimitado' || feature.toLowerCase().includes('enterprise') || feature.toLowerCase().includes('partners')) return true;
       const mappedModule = MODULE_MAPPING[feature];
-      if (feature === 'Ilimitado') return true;
       return mappedModule === moduleId;
     });
   },

@@ -37,6 +37,7 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
 
   const [users, setUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [productsCount, setProductsCount] = useState(0);
 
   const defaultPermissions: UserPermissions = {
     products: 'view',
@@ -135,8 +136,10 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
     try {
       const sub = await db.getSubscription(company.id);
       const invs = await db.getInvoices(company.id);
+      const pCount = await db.getProductsCount(company.id);
       setSubscription(sub);
       setInvoices(invs);
+      setProductsCount(pCount);
     } catch (error) {
       console.error('Error loading subscription:', error);
     } finally {
@@ -863,12 +866,12 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                         <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm border border-white/10">
                           <div className="flex justify-between items-end mb-2">
                             <p className="text-[10px] uppercase tracking-widest opacity-70">Cadastro de Itens</p>
-                            <p className="text-[10px] font-bold">Monitorado</p>
+                            <p className="text-[10px] font-bold">{productsCount} / {subscription.plan?.maxItems === 9999 ? '∞' : subscription.plan?.maxItems}</p>
                           </div>
                           <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
                             <div
                               className="h-full bg-white transition-all duration-1000"
-                              style={{ width: `75%` }}
+                              style={{ width: `${Math.min(100, (productsCount / (subscription.plan?.maxItems || 1)) * 100)}%` }}
                             />
                           </div>
                         </div>
