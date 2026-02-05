@@ -989,5 +989,21 @@ export const db = {
       if (feature === 'Ilimitado') return true;
       return mappedModule === moduleId;
     });
+  },
+
+  async getActiveBanners(): Promise<any[]> {
+    const { data, error } = await supabase
+      .from('banners')
+      .select('*')
+      .eq('is_active', true)
+      .lte('start_date', new Date().toISOString())
+      .gte('end_date', new Date().toISOString())
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching banners:', error);
+      return [];
+    }
+    return data || [];
   }
 };

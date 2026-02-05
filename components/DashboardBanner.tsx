@@ -5,24 +5,15 @@ import { X } from 'lucide-react';
 interface DashboardBannerProps {
     imageUrl: string;
     link?: string;
-    id: string;
 }
 
-const DashboardBanner = ({ imageUrl, link, id }: DashboardBannerProps) => {
-    const [isVisible, setIsVisible] = useState(false);
-
-    useEffect(() => {
-        const isClosed = localStorage.getItem(`banner_closed_${id}`);
-        if (!isClosed) {
-            setIsVisible(true);
-        }
-    }, [id]);
+const DashboardBanner = ({ imageUrl, link }: DashboardBannerProps) => {
+    const [isVisible, setIsVisible] = useState(true);
 
     const handleClose = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
         setIsVisible(false);
-        localStorage.setItem(`banner_closed_${id}`, 'true');
     };
 
     if (!isVisible) return null;
@@ -32,7 +23,7 @@ const DashboardBanner = ({ imageUrl, link, id }: DashboardBannerProps) => {
             <img
                 src={imageUrl}
                 alt="Dashboard Banner"
-                className="w-full h-auto object-cover aspect-[1440/360] transition-transform duration-700 group-hover:scale-105"
+                className="w-full h-auto object-cover aspect-[1440/300] transition-transform duration-700 group-hover:scale-105"
             />
             <button
                 onClick={handleClose}

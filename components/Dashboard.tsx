@@ -14,16 +14,18 @@ const Dashboard = ({ user }: { user: User }) => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [banners, setBanners] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [statsData, compData, productsData] = await Promise.all([
+        const [statsData, compData, productsData, bannersData] = await Promise.all([
           db.getDashboardStats(),
           user.companyId ? db.getCompanyById(user.companyId) : Promise.resolve(null),
-          db.getProducts()
+          db.getProducts(),
+          db.getActiveBanners()
         ]);
 
         // Trigger daily digest check in background
@@ -32,6 +34,7 @@ const Dashboard = ({ user }: { user: User }) => {
         setStats(statsData);
         setCompany(compData);
         setProducts(productsData);
+        setBanners(bannersData);
       } catch (err) {
         console.error("Erro ao carregar dashboard", err);
       } finally {
@@ -65,11 +68,13 @@ const Dashboard = ({ user }: { user: User }) => {
         </div>
       </header>
 
-      <DashboardBanner
-        id="main-dashboard-banner"
-        imageUrl="/dashboard_banner.png"
-        link="https://auraalmoxarifado.com.br"
-      />
+      {banners.map((banner) => (
+        <DashboardBanner
+          key={banner.id}
+          imageUrl={banner.image_url}
+          link={banner.destination_url}
+        />
+      ))}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
