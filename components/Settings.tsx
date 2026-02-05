@@ -822,21 +822,20 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                       <CreditCard size={120} />
                     </div>
                     <div className="relative z-10">
-                      <div className="flex items-center justify-between mb-4">
-                        <span className="inline-block px-3 py-1 bg-white/20 rounded-full text-[10px] font-black uppercase tracking-widest backdrop-blur-sm border border-white/10">
-                          {subscription.plan?.name || 'Plano Personalizado'}
-                        </span>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-3xl font-black">{subscription.plan?.name || 'Plano Personalizado'}</h3>
                         <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                           <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Assinatura Ativa</span>
                         </div>
                       </div>
 
-                      <h3 className="text-3xl font-bold mb-2">Aura Almoxarifado</h3>
-                      <p className="text-blue-100 mb-8 opacity-80">
-                        {subscription.status === 'active'
-                          ? `Próxima renovação em ${new Date(subscription.nextBillingDate).toLocaleDateString('pt-BR')}`
-                          : `Status: ${subscription.status.toUpperCase()}`}
+                      <p className="text-blue-100 mb-6 opacity-60 font-medium">
+                        Aura Almoxarifado • {subscription.plan?.name === 'Partners'
+                          ? 'Acesso Vitalício Parceiro'
+                          : subscription.nextBillingDate && !isNaN(new Date(subscription.nextBillingDate).getTime())
+                            ? `Próxima renovação em ${new Date(subscription.nextBillingDate).toLocaleDateString('pt-BR')}`
+                            : 'Renovação Manual'}
                       </p>
 
                       <div className="flex items-end gap-1 mb-8">
@@ -891,57 +890,61 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap gap-4">
-                        <button
-                          onClick={() => window.open('https://cakto.com.br/aura/upgrade', '_blank')}
-                          className="px-8 py-4 bg-white text-blue-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-50 transition shadow-xl shadow-blue-900/40 flex items-center gap-2 group active:scale-95"
-                        >
-                          Trocar de Plano <ChevronRight size={16} className="group-hover:translate-x-1 transition" />
-                        </button>
-                        <button className="px-8 py-4 bg-white/5 text-white/60 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-white/10 hover:text-white transition backdrop-blur-sm border border-white/10 active:scale-95">
-                          Gerenciar Faturamento
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white dark:bg-slate-900 rounded-[32px] p-8 border border-slate-200 dark:border-slate-800 shadow-sm">
-                    <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                      <Clock size={20} className="text-blue-600" /> Histórico de Faturas
-                    </h3>
-                    <div className="space-y-4">
-                      {invoices.length === 0 ? (
-                        <p className="text-slate-500 text-center py-4">Nenhuma fatura encontrada.</p>
-                      ) : (
-                        invoices.map((inv: any) => (
-                          <div key={inv.id} className="flex items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-2xl transition border-b border-slate-50 dark:border-slate-800 last:border-0">
-                            <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-xl flex items-center justify-center">
-                                <DollarSign size={20} />
-                              </div>
-                              <div>
-                                <h4 className="font-bold text-slate-700 dark:text-slate-200">{inv.planName || inv.description || 'Mensalidade'}</h4>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                  <p className="text-xs text-slate-400">{new Date(inv.billingDate).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</p>
-                                  <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                                  <p className="text-xs text-slate-400 uppercase font-black tracking-tighter">{inv.paymentMethod || 'Cartão'}</p>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="font-bold text-slate-800 dark:text-slate-100 text-lg">R$ {inv.amount.toFixed(2).replace('.', ',')}</p>
-                              <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${inv.status === 'paid' ? 'text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' :
-                                inv.status === 'open' ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' :
-                                  'text-slate-500 bg-slate-50 dark:bg-slate-900/20'
-                                }`}>
-                                {inv.status === 'paid' ? 'Liquidado' : inv.status === 'open' ? 'Aberto' : inv.status}
-                              </span>
-                            </div>
-                          </div>
-                        ))
+                      {subscription.plan?.name !== 'Partners' && (
+                        <div className="flex flex-wrap gap-4">
+                          <button
+                            onClick={() => window.open('https://cakto.com.br/aura/upgrade', '_blank')}
+                            className="px-8 py-4 bg-white text-blue-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-50 transition shadow-xl shadow-blue-900/40 flex items-center gap-2 group active:scale-95"
+                          >
+                            Trocar de Plano <ChevronRight size={16} className="group-hover:translate-x-1 transition" />
+                          </button>
+                          <button className="px-8 py-4 bg-white/5 text-white/60 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-white/10 hover:text-white transition backdrop-blur-sm border border-white/10 active:scale-95">
+                            Gerenciar Faturamento
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
+
+                  {subscription.plan?.name !== 'Partners' && (
+                    <div className="bg-white dark:bg-slate-900 rounded-[32px] p-8 border border-slate-200 dark:border-slate-800 shadow-sm">
+                      <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
+                        <Clock size={20} className="text-blue-600" /> Histórico de Faturas
+                      </h3>
+                      <div className="space-y-4">
+                        {invoices.length === 0 ? (
+                          <p className="text-slate-500 text-center py-4">Nenhuma fatura encontrada.</p>
+                        ) : (
+                          invoices.map((inv: any) => (
+                            <div key={inv.id} className="flex items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-2xl transition border-b border-slate-50 dark:border-slate-800 last:border-0">
+                              <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-xl flex items-center justify-center">
+                                  <DollarSign size={20} />
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-slate-700 dark:text-slate-200">{inv.planName || inv.description || 'Mensalidade'}</h4>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <p className="text-xs text-slate-400">{new Date(inv.billingDate).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</p>
+                                    <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                                    <p className="text-xs text-slate-400 uppercase font-black tracking-tighter">{inv.paymentMethod || 'Cartão'}</p>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-bold text-slate-800 dark:text-slate-100 text-lg">R$ {inv.amount.toFixed(2).replace('.', ',')}</p>
+                                <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${inv.status === 'paid' ? 'text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' :
+                                  inv.status === 'open' ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' :
+                                    'text-slate-500 bg-slate-50 dark:bg-slate-900/20'
+                                  }`}>
+                                  {inv.status === 'paid' ? 'Liquidado' : inv.status === 'open' ? 'Aberto' : inv.status}
+                                </span>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -1185,156 +1188,160 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
           )}
         </div>
       </div>
-      {showSuccessModal && successModalData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-[32px] p-8 max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200">
-            <div className="flex flex-col items-center text-center space-y-6">
-              <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-2">
-                <CheckCircle2 size={40} className="text-green-600 dark:text-green-400" />
-              </div>
-
-              <div>
-                <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">Usuário Criado!</h3>
-                <p className="text-slate-500 dark:text-slate-400">O novo membro da equipe já pode acessar o sistema.</p>
-              </div>
-
-              <div className="w-full bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-6 border border-slate-100 dark:border-slate-800">
-                <div className="mb-4">
-                  <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Nome do Usuário</p>
-                  <p className="font-bold text-slate-800 dark:text-slate-200 text-lg">{successModalData.name}</p>
+      {
+        showSuccessModal && successModalData && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-slate-900 rounded-[32px] p-8 max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200">
+              <div className="flex flex-col items-center text-center space-y-6">
+                <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-2">
+                  <CheckCircle2 size={40} className="text-green-600 dark:text-green-400" />
                 </div>
 
                 <div>
-                  <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">E-mail de Acesso</p>
-                  <div className="flex items-center gap-2 bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 dashed border-2 border-blue-200 dark:border-blue-900">
-                    <Mail size={18} className="text-blue-600 ml-2" />
-                    <span className="flex-1 font-bold text-slate-700 dark:text-slate-200 text-center">
-                      {successModalData.email}
-                    </span>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(successModalData.email);
-                      }}
-                      className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-blue-600 transition"
-                      title="Copiar e-mail"
-                    >
-                      <Copy size={20} />
-                    </button>
+                  <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">Usuário Criado!</h3>
+                  <p className="text-slate-500 dark:text-slate-400">O novo membro da equipe já pode acessar o sistema.</p>
+                </div>
+
+                <div className="w-full bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-6 border border-slate-100 dark:border-slate-800">
+                  <div className="mb-4">
+                    <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Nome do Usuário</p>
+                    <p className="font-bold text-slate-800 dark:text-slate-200 text-lg">{successModalData.name}</p>
                   </div>
+
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">E-mail de Acesso</p>
+                    <div className="flex items-center gap-2 bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 dashed border-2 border-blue-200 dark:border-blue-900">
+                      <Mail size={18} className="text-blue-600 ml-2" />
+                      <span className="flex-1 font-bold text-slate-700 dark:text-slate-200 text-center">
+                        {successModalData.email}
+                      </span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(successModalData.email);
+                        }}
+                        className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-blue-600 transition"
+                        title="Copiar e-mail"
+                      >
+                        <Copy size={20} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setShowSuccessModal(false)}
+                  className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-500/20"
+                >
+                  Concluir
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      }
+      {
+        showPermissionModal && editingPermissionsUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-slate-900 rounded-[32px] p-8 max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                  <Shield size={20} className="text-blue-600" /> Editar Permissões
+                </h3>
+                <button onClick={() => setShowPermissionModal(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition">
+                  <X size={20} className="text-slate-400" />
+                </button>
+              </div>
+
+              <div className="mb-6">
+                <p className="text-sm text-slate-500 mb-4">
+                  Editando permissões para <span className="font-bold text-slate-700 dark:text-slate-300">{editingPermissionsUser.user.name}</span>
+                </p>
+
+                <div className="grid grid-cols-1 gap-3">
+                  {[
+                    { id: 'products', label: 'Produtos', icon: Package },
+                    { id: 'suppliers', label: 'Fornecedores', icon: Truck },
+                    { id: 'inventory', label: 'Estoque', icon: Warehouse },
+                    { id: 'movements', label: 'Movimentações', icon: ArrowLeftRight },
+                    { id: 'reports', label: 'Relatórios', icon: BarChart3 },
+                    { id: 'purchases', label: 'Compras', icon: ShoppingCart },
+                    { id: 'sectors', label: 'Setores', icon: Building2 },
+                  ].map((module) => (
+                    <div key={module.id} className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                      <div className="flex items-center gap-2 mb-2">
+                        {React.createElement(module.icon, { size: 14, className: "text-slate-400" })}
+                        <span className="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wide">{module.label}</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <label className={`
+                          cursor-pointer p-2 rounded-lg text-[10px] font-bold text-center transition border flex items-center justify-center
+                          ${editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'none'
+                            ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/30 dark:border-red-800'
+                            : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-500'}
+                       `}>
+                          <input
+                            type="radio"
+                            name={`edit-perm-${module.id}`}
+                            className="hidden"
+                            checked={editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'none'}
+                            onChange={() => setEditingPermissionsUser({
+                              ...editingPermissionsUser,
+                              permissions: { ...editingPermissionsUser.permissions, [module.id]: 'none' }
+                            })}
+                          />
+                          Bloqueado
+                        </label>
+                        <label className={`
+                          cursor-pointer p-2 rounded-lg text-[10px] font-bold text-center transition border flex items-center justify-center
+                          ${editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'view'
+                            ? 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:border-blue-800'
+                            : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-500'}
+                       `}>
+                          <input
+                            type="radio"
+                            name={`edit-perm-${module.id}`}
+                            className="hidden"
+                            checked={editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'view'}
+                            onChange={() => setEditingPermissionsUser({
+                              ...editingPermissionsUser,
+                              permissions: { ...editingPermissionsUser.permissions, [module.id]: 'view' }
+                            })}
+                          />
+                          Ver
+                        </label>
+                        <label className={`
+                          cursor-pointer p-2 rounded-lg text-[10px] font-bold text-center transition border flex items-center justify-center
+                          ${editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'full'
+                            ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800'
+                            : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-500'}
+                       `}>
+                          <input
+                            type="radio"
+                            name={`edit-perm-${module.id}`}
+                            className="hidden"
+                            checked={editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'full'}
+                            onChange={() => setEditingPermissionsUser({
+                              ...editingPermissionsUser,
+                              permissions: { ...editingPermissionsUser.permissions, [module.id]: 'full' }
+                            })}
+                          />
+                          Total
+                        </label>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              <button
-                onClick={() => setShowSuccessModal(false)}
-                className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-500/20"
-              >
-                Concluir
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {showPermissionModal && editingPermissionsUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-[32px] p-8 max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                <Shield size={20} className="text-blue-600" /> Editar Permissões
-              </h3>
-              <button onClick={() => setShowPermissionModal(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition">
-                <X size={20} className="text-slate-400" />
-              </button>
-            </div>
-
-            <div className="mb-6">
-              <p className="text-sm text-slate-500 mb-4">
-                Editando permissões para <span className="font-bold text-slate-700 dark:text-slate-300">{editingPermissionsUser.user.name}</span>
-              </p>
-
-              <div className="grid grid-cols-1 gap-3">
-                {[
-                  { id: 'products', label: 'Produtos', icon: Package },
-                  { id: 'suppliers', label: 'Fornecedores', icon: Truck },
-                  { id: 'inventory', label: 'Estoque', icon: Warehouse },
-                  { id: 'movements', label: 'Movimentações', icon: ArrowLeftRight },
-                  { id: 'reports', label: 'Relatórios', icon: BarChart3 },
-                  { id: 'purchases', label: 'Compras', icon: ShoppingCart },
-                  { id: 'sectors', label: 'Setores', icon: Building2 },
-                ].map((module) => (
-                  <div key={module.id} className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
-                    <div className="flex items-center gap-2 mb-2">
-                      {React.createElement(module.icon, { size: 14, className: "text-slate-400" })}
-                      <span className="font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wide">{module.label}</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <label className={`
-                          cursor-pointer p-2 rounded-lg text-[10px] font-bold text-center transition border flex items-center justify-center
-                          ${editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'none'
-                          ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/30 dark:border-red-800'
-                          : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-500'}
-                       `}>
-                        <input
-                          type="radio"
-                          name={`edit-perm-${module.id}`}
-                          className="hidden"
-                          checked={editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'none'}
-                          onChange={() => setEditingPermissionsUser({
-                            ...editingPermissionsUser,
-                            permissions: { ...editingPermissionsUser.permissions, [module.id]: 'none' }
-                          })}
-                        />
-                        Bloqueado
-                      </label>
-                      <label className={`
-                          cursor-pointer p-2 rounded-lg text-[10px] font-bold text-center transition border flex items-center justify-center
-                          ${editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'view'
-                          ? 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:border-blue-800'
-                          : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-500'}
-                       `}>
-                        <input
-                          type="radio"
-                          name={`edit-perm-${module.id}`}
-                          className="hidden"
-                          checked={editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'view'}
-                          onChange={() => setEditingPermissionsUser({
-                            ...editingPermissionsUser,
-                            permissions: { ...editingPermissionsUser.permissions, [module.id]: 'view' }
-                          })}
-                        />
-                        Ver
-                      </label>
-                      <label className={`
-                          cursor-pointer p-2 rounded-lg text-[10px] font-bold text-center transition border flex items-center justify-center
-                          ${editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'full'
-                          ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800'
-                          : 'bg-slate-50 text-slate-400 border-transparent hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-500'}
-                       `}>
-                        <input
-                          type="radio"
-                          name={`edit-perm-${module.id}`}
-                          className="hidden"
-                          checked={editingPermissionsUser.permissions[module.id as keyof UserPermissions] === 'full'}
-                          onChange={() => setEditingPermissionsUser({
-                            ...editingPermissionsUser,
-                            permissions: { ...editingPermissionsUser.permissions, [module.id]: 'full' }
-                          })}
-                        />
-                        Total
-                      </label>
-                    </div>
-                  </div>
-                ))}
+              <div className="flex gap-3">
+                <button onClick={() => setShowPermissionModal(false)} className="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition">Cancelar</button>
+                <button onClick={handleSavePermissions} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition shadow-lg shadow-blue-500/20">Salvar Alterações</button>
               </div>
             </div>
-
-            <div className="flex gap-3">
-              <button onClick={() => setShowPermissionModal(false)} className="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition">Cancelar</button>
-              <button onClick={handleSavePermissions} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition shadow-lg shadow-blue-500/20">Salvar Alterações</button>
-            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 };
 

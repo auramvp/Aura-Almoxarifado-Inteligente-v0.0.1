@@ -377,7 +377,9 @@ export const db = {
         maxItems: planData?.max_items || 9999,
         price: Number(sub?.value || planData?.value || 0),
         interval: 'monthly',
-        features: planData?.description ? [planData.description] : [],
+        features: planData?.description
+          ? planData.description.split(/[,\n;]+/).map((f: string) => f.trim()).filter(Boolean)
+          : [],
         active: true
       }
     };
@@ -995,8 +997,13 @@ export const db = {
       return false;
     }
 
+    const normalizedPlanName = sub.plan.name.toLowerCase();
+    if (normalizedPlanName.includes('partners') || normalizedPlanName.includes('enterprise')) return true;
+
     return sub.plan.features.some(feature => {
-      if (feature === 'Ilimitado' || feature.toLowerCase().includes('enterprise') || feature.toLowerCase().includes('partners')) return true;
+      const f = feature.toLowerCase();
+      if (f.includes('ilimitado') || f.includes('unlimited') || f.includes('todos os módulos')) return true;
+
       const mappedModule = MODULE_MAPPING[feature];
       return mappedModule === moduleId;
     });
