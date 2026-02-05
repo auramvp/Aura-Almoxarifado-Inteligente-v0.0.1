@@ -23,7 +23,20 @@ import ImportData from './components/ImportExport.tsx';
 import Support from './components/Support.tsx';
 import Purchases from './components/Purchases.tsx';
 import Settings from './components/Settings.tsx';
+import PartnerRegistration from './components/PartnerRegistration.tsx';
 import AuraBackground from './components/ui/AuraBackground.tsx';
+import { SystemModule } from './services/db.ts';
+
+const FeatureGate = ({ module, companyId, children, fallback = null }: { module: SystemModule; companyId: string; children: React.ReactNode; fallback?: React.ReactNode }) => {
+  const [hasAccess, setHasAccess] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    db.canAccessModule(companyId, module).then(setHasAccess);
+  }, [module, companyId]);
+
+  if (hasAccess === null) return null; // Or a small loader
+  return hasAccess ? <>{children}</> : <>{fallback}</>;
+};
 
 const Logo = ({ collapsed, size = 'md' }: { collapsed: boolean; size?: 'sm' | 'md' | 'lg' }) => {
   const sizes = {
@@ -396,22 +409,10 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
                   <div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="email" placeholder="seu@email.com" className={inputClass} value={formData.magicEmail} onChange={e => setFormData({ ...formData, magicEmail: e.target.value })} /></div>
                 </div>
                 <button onClick={handleMagicLinkLogin} disabled={loading || !formData.magicEmail} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg shadow-blue-500/20 active:scale-95 transition-all">{loading ? <Loader2 className="animate-spin mx-auto" size={16} /> : 'Link Mágico'}</button>
-
-                <div className="relative py-2"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100 dark:border-slate-800" /></div><div className="relative flex justify-center text-[9px] uppercase"><span className="bg-white dark:bg-slate-900 px-3 text-slate-400 font-black tracking-widest">Ou use senha</span></div></div>
-
-                <form onSubmit={handleSubmit} className="space-y-3">
-                  <div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input type="email" placeholder="E-mail" className={inputClass} value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} /></div>
-                  <div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input type={showPassword ? "text" : "password"} placeholder="Senha" className={inputClass} value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} /><button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-blue-600">{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></div>
-                  <button type="submit" disabled={loading} className="w-full py-3 bg-slate-800 dark:bg-slate-700 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest active:scale-95 transition-all">Entrar</button>
-                </form>
               </div>
 
-              <div className="flex flex-col gap-3 pt-4 mt-4 border-t border-slate-100 dark:border-slate-800">
-                <button onClick={() => setAuthMode('register')} className="w-full py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all hover:bg-blue-100">Já sou assinante: Criar Conta</button>
-                <div className="flex items-center justify-between">
-                  <button onClick={() => setAuthMode('forgotPassword')} className="text-slate-400 hover:text-blue-600 text-[9px] font-black uppercase tracking-widest transition-colors">Esqueci Senha</button>
-                  <button onClick={() => window.open('https://auraalmoxarifado.com.br', '_blank')} className="text-slate-400 hover:text-blue-600 text-[9px] font-black uppercase tracking-widest transition-colors">Assinar</button>
-                </div>
+              <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 text-center">
+                <button onClick={() => window.open('https://auraalmoxarifado.com.br', '_blank')} className="text-slate-400 hover:text-blue-600 text-[9px] font-black uppercase tracking-widest transition-colors">Assinar</button>
               </div>
             </div>
           )}
@@ -504,11 +505,35 @@ const SidebarNavigation = ({ user, setSidebarOpen, collapsed }: any) => {
   const location = useLocation();
   const isAlmoxarife = user.role === UserRole.ALMOXARIFE;
 
+  const [allowedModules, setAllowedModules] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (user?.companyId) {
+      const modules: SystemModule[] = ['inventory', 'reports', 'ai', 'purchases', 'sectors', 'suppliers', 'support'];
+      Promise.all(modules.map(m => db.canAccessModule(user.companyId, m)))
+        .then(results => {
+          const mapping: Record<string, boolean> = {};
+          modules.forEach((m, i) => mapping[m] = results[i]);
+          setAllowedModules(mapping);
+        });
+    }
+  }, [user]);
+
   const canAccess = (module: string) => {
-    if (isAlmoxarife) return true;
-    if (!user.permissions) return false;
-    // @ts-ignore
-    return user.permissions[module] && user.permissions[module] !== 'none';
+    // Permission-based check (Role/Permissions)
+    let hasPermission = false;
+    if (isAlmoxarife) hasPermission = true;
+    else if (user.permissions) {
+      // @ts-ignore
+      hasPermission = user.permissions[module] && user.permissions[module] !== 'none';
+    }
+
+    // Plan-based check (Modules)
+    // Some modules map directly to internal names
+    const planModule = module === 'products' ? 'inventory' : (module as SystemModule);
+    const isModuleAllowedByPlan = allowedModules[planModule] ?? true; // Default to true while loading to avoid flickering
+
+    return hasPermission && isModuleAllowedByPlan;
   };
 
   return (
@@ -523,11 +548,11 @@ const SidebarNavigation = ({ user, setSidebarOpen, collapsed }: any) => {
       {canAccess('reports') && <SidebarItem to="/relatorios" icon={BarChart3} label="Relatórios" active={location.pathname === '/relatorios'} onClick={() => setSidebarOpen(false)} collapsed={collapsed} />}
       {isAlmoxarife && (
         <>
-          <SidebarItem to="/otimizacao" icon={Sparkles} label="Otimização" active={location.pathname === '/otimizacao'} onClick={() => setSidebarOpen(false)} collapsed={collapsed} />
+          {canAccess('ai') && <SidebarItem to="/otimizacao" icon={Sparkles} label="Otimização" active={location.pathname === '/otimizacao'} onClick={() => setSidebarOpen(false)} collapsed={collapsed} />}
           <SidebarItem to="/importar" icon={FileUp} label="Planilhas" active={location.pathname === '/importar'} onClick={() => setSidebarOpen(false)} collapsed={collapsed} />
         </>
       )}
-      <SidebarItem to="/suporte" icon={LifeBuoy} label="Suporte" active={location.pathname === '/suporte'} onClick={() => setSidebarOpen(false)} collapsed={collapsed} />
+      {canAccess('support') && <SidebarItem to="/suporte" icon={LifeBuoy} label="Suporte" active={location.pathname === '/suporte'} onClick={() => setSidebarOpen(false)} collapsed={collapsed} />}
     </div>
   );
 };
@@ -590,110 +615,116 @@ const App = () => {
     );
   }
 
-  if (!user) return <Router><AuthScreen onLogin={setUser} /></Router>;
-
   return (
     <Router>
-      <div className={`h-screen flex bg-[#F8FAFC] dark:bg-slate-950 transition-colors duration-300 font-sans overflow-hidden`}>
-        {/* Suspended Modal */}
-        {showSuspendedModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-6">
-            <div className="bg-white dark:bg-slate-900 rounded-[32px] p-10 max-w-lg w-full text-center space-y-6 shadow-2xl border border-red-100 dark:border-red-900/30">
-              <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-3xl flex items-center justify-center mx-auto animate-bounce">
-                <AlertCircle size={40} />
+      {!user ? (
+        <Routes>
+          <Route path="/registro-parceiro" element={<PartnerRegistration />} />
+          <Route path="*" element={<AuthScreen onLogin={setUser} />} />
+        </Routes>
+      ) : (
+        <div className={`h-screen flex bg-[#F8FAFC] dark:bg-slate-950 transition-colors duration-300 font-sans overflow-hidden`}>
+          {/* Suspended Modal */}
+          {showSuspendedModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-6">
+              <div className="bg-white dark:bg-slate-900 rounded-[32px] p-10 max-w-lg w-full text-center space-y-6 shadow-2xl border border-red-100 dark:border-red-900/30">
+                <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-3xl flex items-center justify-center mx-auto animate-bounce">
+                  <AlertCircle size={40} />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Sistema Suspenso</h2>
+                  <p className="text-slate-500 dark:text-slate-400 font-bold leading-relaxed">
+                    Ops! Identificamos uma pendência na sua assinatura. Para continuar otimizando seu almoxarifado, regularize seu acesso.
+                  </p>
+                </div>
+                <button
+                  onClick={() => window.open('https://cakto.com.br/aura/fatura', '_blank')}
+                  className="w-full py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-500/20 active:scale-95 transition-all flex items-center justify-center gap-3"
+                >
+                  Regularizar Agora <ChevronRight size={20} />
+                </button>
+                <button
+                  onClick={async () => {
+                    await db.logout();
+                    setUser(null);
+                  }}
+                  className="flex items-center gap-2 text-slate-400 hover:text-slate-600 font-bold mx-auto text-sm transition-colors"
+                >
+                  Sair da conta
+                </button>
               </div>
-              <div className="space-y-2">
-                <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Sistema Suspenso</h2>
-                <p className="text-slate-500 dark:text-slate-400 font-bold leading-relaxed">
-                  Ops! Identificamos uma pendência na sua assinatura. Para continuar otimizando seu almoxarifado, regularize seu acesso.
-                </p>
+            </div>
+          )}
+
+          {/* Sidebar Overlay (Mobile) */}
+          {isSidebarOpen && (
+            <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-[60] lg:hidden" onClick={() => setSidebarOpen(false)} />
+          )}
+
+          {/* Sidebar */}
+          <aside className={`fixed lg:sticky top-0 h-screen z-50 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-500 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} ${isCollapsed ? 'w-24' : 'w-72'} flex-shrink-0`}>
+            <div className="h-full flex flex-col p-6 overflow-hidden">
+              <div className={`mb-6 flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
+                <Logo collapsed={isCollapsed} />
+                {!isCollapsed && (
+                  <button onClick={() => setIsCollapsed(true)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-all"><ChevronLeft size={20} /></button>
+                )}
+                {isCollapsed && (
+                  <button onClick={() => setIsCollapsed(false)} className="absolute -right-3 top-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-full text-slate-400 hover:text-blue-600 shadow-sm z-10"><ChevronRight size={14} /></button>
+                )}
               </div>
-              <button
-                onClick={() => window.open('https://cakto.com.br/aura/fatura', '_blank')}
-                className="w-full py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-500/20 active:scale-95 transition-all flex items-center justify-center gap-3"
-              >
-                Regularizar Agora <ChevronRight size={20} />
-              </button>
-              <button
-                onClick={async () => {
-                  await db.logout();
-                  setUser(null);
-                }}
-                className="flex items-center gap-2 text-slate-400 hover:text-slate-600 font-bold mx-auto text-sm transition-colors"
-              >
-                Sair da conta
-              </button>
+
+              {company && <CompanyCard company={company} collapsed={isCollapsed} user={user!} />}
+
+              <nav className="flex-1 overflow-y-auto no-scrollbar py-2 scrollbar-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                <SidebarNavigation user={user} setSidebarOpen={setSidebarOpen} collapsed={isCollapsed} />
+              </nav>
+
+              <UserCard
+                user={user}
+                isDarkMode={isDarkMode}
+                toggleTheme={() => setIsDarkMode(!isDarkMode)}
+                collapsed={isCollapsed}
+                onLogout={async () => { await db.logout(); setUser(null); }}
+              />
             </div>
-          </div>
-        )}
+          </aside>
 
-        {/* Sidebar Overlay (Mobile) */}
-        {isSidebarOpen && (
-          <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-[60] lg:hidden" onClick={() => setSidebarOpen(false)} />
-        )}
+          {/* Mobile menu button */}
+          {!isSidebarOpen && (
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="lg:hidden fixed top-4 left-4 z-40 p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg text-slate-500 hover:text-blue-600 transition-all active:scale-95"
+            >
+              <LayoutDashboard size={20} />
+            </button>
+          )}
 
-        {/* Sidebar */}
-        <aside className={`fixed lg:sticky top-0 h-screen z-50 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-500 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} ${isCollapsed ? 'w-24' : 'w-72'} flex-shrink-0`}>
-          <div className="h-full flex flex-col p-6 overflow-hidden">
-            <div className={`mb-6 flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
-              <Logo collapsed={isCollapsed} />
-              {!isCollapsed && (
-                <button onClick={() => setIsCollapsed(true)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-all"><ChevronLeft size={20} /></button>
-              )}
-              {isCollapsed && (
-                <button onClick={() => setIsCollapsed(false)} className="absolute -right-3 top-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-full text-slate-400 hover:text-blue-600 shadow-sm z-10"><ChevronRight size={14} /></button>
-              )}
+          {/* Main Content */}
+          <main className="flex-1 flex flex-col min-w-0">
+
+            <div className="flex-1 p-8 overflow-y-auto bg-[#F8FAFC] dark:bg-slate-950">
+              <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <Routes>
+                  <Route path="/" element={<Dashboard user={user} />} />
+                  <Route path="/produtos" element={<Products user={user} />} />
+                  <Route path="/fornecedores" element={<Suppliers user={user} />} />
+                  <Route path="/estoque" element={<Inventory user={user} />} />
+                  <Route path="/movimentacoes" element={<Movements user={user} />} />
+                  <Route path="/setores" element={<Sectors user={user} />} />
+                  <Route path="/compras" element={<Purchases user={user} />} />
+                  <Route path="/relatorios" element={<Reports user={user} />} />
+                  <Route path="/otimizacao" element={<Optimization user={user} />} />
+                  <Route path="/importar" element={<ImportData user={user} />} />
+                  <Route path="/suporte" element={<Support user={user} />} />
+                  <Route path="/configuracoes" element={user?.role === UserRole.ALMOXARIFE ? <Settings user={user} company={company!} /> : <Dashboard user={user} />} />
+                  <Route path="/registro-parceiro" element={<PartnerRegistration />} />
+                </Routes>
+              </div>
             </div>
-
-            {company && <CompanyCard company={company} collapsed={isCollapsed} user={user!} />}
-
-            <nav className="flex-1 overflow-y-auto no-scrollbar py-2 scrollbar-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-              <SidebarNavigation user={user} setSidebarOpen={setSidebarOpen} collapsed={isCollapsed} />
-            </nav>
-
-            <UserCard
-              user={user}
-              isDarkMode={isDarkMode}
-              toggleTheme={() => setIsDarkMode(!isDarkMode)}
-              collapsed={isCollapsed}
-              onLogout={async () => { await db.logout(); setUser(null); }}
-            />
-          </div>
-        </aside>
-
-        {/* Mobile menu button */}
-        {!isSidebarOpen && (
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="lg:hidden fixed top-4 left-4 z-40 p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg text-slate-500 hover:text-blue-600 transition-all active:scale-95"
-          >
-            <LayoutDashboard size={20} />
-          </button>
-        )}
-
-        {/* Main Content */}
-        <main className="flex-1 flex flex-col min-w-0">
-
-          <div className="flex-1 p-8 overflow-y-auto bg-[#F8FAFC] dark:bg-slate-950">
-            <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <Routes>
-                <Route path="/" element={<Dashboard user={user} />} />
-                <Route path="/produtos" element={<Products user={user} />} />
-                <Route path="/fornecedores" element={<Suppliers user={user} />} />
-                <Route path="/estoque" element={<Inventory user={user} />} />
-                <Route path="/movimentacoes" element={<Movements user={user} />} />
-                <Route path="/setores" element={<Sectors user={user} />} />
-                <Route path="/compras" element={<Purchases user={user} />} />
-                <Route path="/relatorios" element={<Reports user={user} />} />
-                <Route path="/otimizacao" element={<Optimization user={user} />} />
-                <Route path="/importar" element={<ImportData user={user} />} />
-                <Route path="/suporte" element={<Support user={user} />} />
-                <Route path="/configuracoes" element={user?.role === UserRole.ALMOXARIFE ? <Settings user={user} company={company!} /> : <Dashboard user={user} />} />
-              </Routes>
-            </div>
-          </div>
-        </main>
-      </div>
+          </main>
+        </div>
+      )}
     </Router>
   );
 };

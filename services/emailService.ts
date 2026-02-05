@@ -437,5 +437,35 @@ export const EmailService = {
 
     const html = generateEmailTemplate('Convite de Cadastro', content, accentColor);
     return this.sendEmail({ to: email, subject, html });
+  },
+  async sendPartnerInvitation(email: string, cnpj: string, name: string) {
+    const subject = `🤝 Convite Especial Aura - Parceiro de Almoxarifado`;
+    const accentColor = '#6366f1'; // Indigo
+    const registrationLink = `${getBaseUrl()}/registro-parceiro?email=${encodeURIComponent(email)}&cnpj=${encodeURIComponent(cnpj)}&name=${encodeURIComponent(name)}`;
+
+    const content = `
+      <p style="margin-top: 0; font-size: 16px; line-height: 1.6; color: #374151;">
+        Olá! Sua empresa foi convidada como <strong>Parceira Aura</strong>.
+      </p>
+
+      <div style="background-color: #f3f4f6; border-radius: 12px; padding: 24px; margin: 24px 0;">
+         <p style="margin: 0; font-size: 11px; text-transform: uppercase; color: #6b7280; font-weight: 700; letter-spacing: 0.5px;">Dados da Empresa</p>
+         <p style="margin: 4px 0 0; font-size: 18px; font-weight: 700; color: #1f2937;">${name}</p>
+         <p style="margin: 2px 0 0; font-size: 12px; font-mono; color: #6b7280;">CNPJ: ${cnpj}</p>
+      </div>
+
+      <div style="text-align: center; margin: 32px 0;">
+        <a href="${registrationLink}" style="background-color: #6366f1; color: #ffffff; padding: 16px 32px; border-radius: 12px; font-weight: 800; text-decoration: none; display: inline-block; text-transform: uppercase; font-size: 14px; letter-spacing: 1px; box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.2);">
+          Aceitar Convite e Começar
+        </a>
+      </div>
+
+      <p style="font-size: 14px; color: #6b7280; line-height: 1.5;">
+        Este convite é exclusivo para a sua empresa. Ao clicar no botão, os dados da empresa já estarão pré-preenchidos. Bastará informar seu nome e criar uma senha para acessar o painel de parceiro.
+      </p>
+    `;
+
+    const html = generateEmailTemplate('Convite de Parceiro', content, accentColor);
+    return this.sendEmail({ to: email, subject, html });
   }
 };

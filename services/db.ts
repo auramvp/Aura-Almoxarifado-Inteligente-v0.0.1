@@ -16,12 +16,27 @@ const normalize = (str: string | undefined): string => {
   return str.trim().toUpperCase().replace(/\s+/g, ' ');
 };
 
+// Feature mapping from Plan.features to internal module IDs
+export type SystemModule = 'inventory' | 'reports' | 'ai' | 'purchases' | 'sectors' | 'suppliers' | 'support';
+
+export const MODULE_MAPPING: Record<string, SystemModule> = {
+  'Controle de Estoque Básico': 'inventory',
+  'Controle Avançado': 'inventory',
+  'IA Otimizadora': 'ai',
+  'IA Premium': 'ai',
+  'Relatórios Simples': 'reports',
+  'Relatórios Avançados': 'reports',
+  'Suporte Prioritário': 'support',
+  'API Dedicada': 'purchases',
+  'Gestor de Contas': 'support',
+  'Ilimitado': 'inventory'
+};
+
 export const db = {
   async getImportHistory(): Promise<AuditLog[]> {
     const user = await this.getCurrentUser();
     if (!user?.companyId) return [];
 
-    // Busca usuários da mesma empresa para filtrar logs
     const { data: companyUsers } = await supabase
       .from('profiles')
       .select('id')
@@ -35,7 +50,7 @@ export const db = {
       .select('*')
       .eq('entity', 'IMPORT_BATCH')
       .eq('action', 'IMPORT')
-      .in('user_id', userIds) // Filtra apenas logs dos usuários desta empresa
+      .in('user_id', userIds)
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -66,11 +81,9 @@ export const db = {
   async getCurrentUser(): Promise<User | null> {
     const { data: { user } } = await supabase.auth.getUser();
 
-    // 1. If valid Auth session exists, return fresh profile
     if (user) {
       let { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
 
-      // IF PROFILE NOT FOUND BY ID: Try syncing by email (for users added manually)
       if (!profile && user.email) {
         const { data: emailProfile } = await supabase.from('profiles')
           .select('*')
@@ -78,7 +91,6 @@ export const db = {
           .maybeSingle();
 
         if (emailProfile) {
-          // Sync existing profile with new Auth ID
           const { data: updated, error: syncError } = await supabase
             .from('profiles')
             .update({ id: user.id })
@@ -88,10 +100,8 @@ export const db = {
 
           if (!syncError) {
             profile = updated;
-            console.log("Profile synced successfully with Auth ID");
           } else {
-            console.error("Failed to sync profile ID:", syncError);
-            profile = emailProfile; // Fallback
+            profile = emailProfile;
           }
         }
       }
@@ -109,17 +119,14 @@ export const db = {
         permissions: profile.permissions
       } as User;
 
-      // Update cache
       localStorage.setItem('aura_user', JSON.stringify(fullUser));
       return fullUser;
     }
 
-    // 2. Fallback: Check LocalStorage for "Legacy Login"
     const cached = localStorage.getItem('aura_user');
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        // Verify if it looks like a valid user
         if (parsed && parsed.id && parsed.companyId) {
           return parsed;
         }
@@ -133,33 +140,27 @@ export const db = {
 
   async login(email: string, password?: string): Promise<User | null> {
     if (password) {
-      const { error } = await supabase.auth.signInWithPassword({
+      await supabase.auth.signInWithPassword({
         email: email.toLowerCase(),
         password
       });
-      if (error) {
-        console.error("Supabase Auth Error (ignoring for legacy access):", error);
-      }
     }
 
     const { data: profile } = await supabase.from('profiles').select('*').eq('email', email.toLowerCase()).single();
     if (!profile) return null;
-    let role = profile.role;
 
     const fullUser = {
       id: profile.id,
       name: profile.name,
       email: profile.email,
-      role: role as UserRole,
+      role: profile.role as UserRole,
       createdAt: profile.created_at,
       companyId: profile.company_id,
       accessCode: profile.access_code,
       permissions: profile.permissions
     } as User;
 
-    // Save to LocalStorage for persistence
     localStorage.setItem('aura_user', JSON.stringify(fullUser));
-
     return fullUser;
   },
 
@@ -170,8 +171,43 @@ export const db = {
     if (error) throw error;
   },
 
+  async addUser(user: { name: string; email?: string; role: UserRole; companyId: string; accessCode?: string; permissions?: any }): Promise<User> {
+    if (!user.companyId) throw new Error("ID da empresa é obrigatório");
+
+    const sub = await this.getSubscription(user.companyId);
+    if (sub?.plan) {
+      const { count } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('company_id', user.companyId);
+      if (count && count >= sub.plan.maxUsers) {
+        throw new Error(`Limite de usuários atingido para o seu plano (${sub.plan.maxUsers}).`);
+      }
+    }
+
+    const email = user.email || `${user.name.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '')}.${Date.now().toString().slice(-4)}@aura.local`;
+
+    const { data, error } = await supabase.from('profiles').insert({
+      name: user.name,
+      email: email,
+      role: user.role,
+      company_id: user.companyId,
+      access_code: user.accessCode || '',
+      permissions: user.permissions || {}
+    }).select().single();
+
+    if (error) throw error;
+
+    return {
+      id: data.id,
+      name: data.name,
+      email: data.email,
+      role: data.role as UserRole,
+      createdAt: data.created_at,
+      companyId: data.company_id,
+      accessCode: data.access_code,
+      permissions: data.permissions
+    };
+  },
+
   async register(userData: any, companyData: any): Promise<User> {
-    // 1. Create Auth User
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: userData.email,
       password: userData.password,
@@ -180,7 +216,6 @@ export const db = {
     if (authError) throw authError;
     if (!authData.user) throw new Error("Erro ao criar usuário de autenticação.");
 
-    // 2. Create Company
     const { data: company, error: compErr } = await supabase.from('companies').insert({
       cnpj: companyData.cnpj,
       name: companyData.name,
@@ -195,16 +230,10 @@ export const db = {
       contact_extra: companyData.contactExtra
     }).select().single();
 
-    if (compErr) {
-      // Rollback auth user if company creation fails? 
-      // Ideally yes, but Supabase doesn't support transactions across auth and public schema easily from client.
-      // For now, we assume it works or manual cleanup is needed.
-      throw compErr;
-    }
+    if (compErr) throw compErr;
 
-    // 3. Create Profile linked to Auth User
     const { data: user, error: userErr } = await supabase.from('profiles').insert({
-      id: authData.user.id, // Link to Auth User ID
+      id: authData.user.id,
       name: userData.name,
       email: userData.email,
       role: UserRole.ALMOXARIFE,
@@ -214,6 +243,58 @@ export const db = {
     if (userErr) throw userErr;
 
     return { id: user.id, name: user.name, email: user.email, role: user.role, createdAt: user.created_at, companyId: user.company_id } as User;
+  },
+
+  async registerPartner(userData: { name: string, email: string, password?: string }, companyData: { cnpj: string, name: string }): Promise<User> {
+    // 1. Create Auth User
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: userData.email,
+      password: userData.password || Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12),
+    });
+
+    if (authError) throw authError;
+    if (!authData.user) throw new Error("Erro ao criar usuário de autenticação.");
+
+    // 2. Create Company
+    const { data: company, error: compErr } = await supabase.from('companies').insert({
+      cnpj: companyData.cnpj,
+      name: companyData.name,
+      status: 'active',
+      sector_name: 'Geral',
+      sector_responsible: userData.name,
+      email: userData.email
+    }).select().single();
+
+    if (compErr) throw compErr;
+
+    // 3. Create Profile
+    const { data: user, error: userErr } = await supabase.from('profiles').insert({
+      id: authData.user.id,
+      name: userData.name,
+      email: userData.email,
+      role: UserRole.ALMOXARIFE,
+      company_id: company.id
+    }).select().single();
+
+    if (userErr) throw userErr;
+
+    // 4. Create Automatic Partners Subscription for Partners
+    // First find the Partners plan ID
+    const { data: plan } = await supabase.from('plans').select('id').eq('name', 'Partners').single();
+
+    if (plan) {
+      await supabase.from('subscriptions').insert({
+        company_id: company.id,
+        plan_id: plan.id,
+        status: 'active',
+        start_date: new Date().toISOString().split('T')[0]
+      });
+    }
+
+    // 5. Send Magic Link for immediate login
+    await this.sendMagicLink(userData.email);
+
+    return { id: user.id, name: user.name, email: user.email, role: user.role as UserRole, createdAt: user.created_at, companyId: user.company_id } as User;
   },
 
   async checkDailyDigest() {
@@ -252,7 +333,6 @@ export const db = {
   },
 
   async getSubscription(companyId: string): Promise<Subscription | null> {
-    // Busca empresa para pegar o CNPJ (usado na vinculação da Cacto)
     const company = await this.getCompanyById(companyId);
     if (!company) return null;
 
@@ -267,7 +347,6 @@ export const db = {
 
     if (error || !sub) return null;
 
-    // Busca detalhes do plano se existir
     let planData = null;
     if (sub.plan) {
       const { data: plan } = await supabase
@@ -339,19 +418,19 @@ export const db = {
   },
 
   async sendMagicLink(email: string): Promise<void> {
+    const isProd = window.location.hostname === 'app.auraalmoxarifado.com.br';
+    const redirectTo = isProd ? 'https://app.auraalmoxarifado.com.br' : window.location.origin;
+
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: window.location.origin
+        emailRedirectTo: redirectTo
       }
     });
     if (error) throw error;
   },
 
   async hasActiveSubscription(email: string): Promise<boolean> {
-    // Verifica na tabela subscriptions se existe algum registro ativo para este email ou CNPJ vinculado
-    // Nota: O webhook da Cakto popula o campo cnpj e company, mas podemos precisar buscar pelo email se o webhook salvar lá tbm
-    // Por segurança, buscamos por cnpj (se o usuário já tiver) ou aguardamos o vínculo do webhook
     const { data, error } = await supabase
       .from('subscriptions')
       .select('status')
@@ -376,7 +455,6 @@ export const db = {
     return { valid: true, plan: data.plan };
   },
 
-  // Sectors
   async getSectors(): Promise<Sector[]> {
     const user = await this.getCurrentUser();
     if (!user?.companyId) return [];
@@ -408,7 +486,6 @@ export const db = {
     return data;
   },
 
-  // Support Tickets
   async createSupportTicket(description: string): Promise<SupportTicket> {
     const user = await this.getCurrentUser();
     if (!user?.companyId) throw new Error("Usuário sem empresa");
@@ -586,15 +663,9 @@ export const db = {
 
   async getProducts(): Promise<Product[]> {
     const user = await this.getCurrentUser();
-    if (!user?.companyId) {
-      console.warn('getProducts: Usuário sem empresa ou não logado');
-      return [];
-    }
+    if (!user?.companyId) return [];
     const { data, error } = await supabase.from('products').select('*').eq('active', true).eq('company_id', user.companyId);
-    if (error) {
-      console.error('Erro ao buscar produtos:', error);
-      return [];
-    }
+    if (error) return [];
     return (data || []).map(p => ({
       id: p.id, companyId: p.company_id, cod: p.cod, description: p.description, unit: p.unit, minStock: p.min_stock, categoryId: p.category_id, defaultSupplierId: p.default_supplier_id, storageLocation: p.storage_location, observations: p.observations, pmed: Number(p.pmed || 0), active: p.active, createdAt: p.created_at, updatedAt: p.updated_at
     })) as Product[];
@@ -603,9 +674,18 @@ export const db = {
   async saveProduct(p: any): Promise<Product> {
     const user = await this.getCurrentUser();
     if (!user?.companyId) throw new Error("Usuário sem empresa");
+
+    const sub = await this.getSubscription(user.companyId);
+    if (sub?.plan) {
+      const products = await this.getProducts();
+      if (products.length >= sub.plan.maxItems) {
+        throw new Error(`Limite de produtos atingido para o seu plano (${sub.plan.maxItems}).`);
+      }
+    }
+
     const payload = {
       cod: normalize(p.cod), description: p.description, unit: normalize(p.unit),
-      min_stock: p.minStock, category_id: p.categoryId || null,
+      min_stock: p.min_stock, category_id: p.categoryId || null,
       default_supplier_id: p.defaultSupplierId || null,
       storage_location: normalize(p.storageLocation), observations: p.observations,
       pmed: Number(p.pmed || 0), active: true, company_id: user.companyId
@@ -619,9 +699,7 @@ export const db = {
     const user = await this.getCurrentUser();
     if (!user?.companyId) throw new Error("Usuário sem empresa");
 
-    // Apenas incluir campos que foram explicitamente passados
     const payload: any = {};
-
     if (updates.cod !== undefined) payload.cod = normalize(updates.cod);
     if (updates.description !== undefined) payload.description = updates.description;
     if (updates.unit !== undefined) payload.unit = normalize(updates.unit);
@@ -682,9 +760,7 @@ export const db = {
     const { data, error } = await supabase.from('stock_movements').insert(payload).select().single();
     if (error) throw error;
 
-    // --- ALERT LOGIC ---
     try {
-      // Recalculate stock after movement
       let finalStock = currentStock;
       if (m.type === MovementType.OUT) finalStock -= Number(m.quantity);
       else finalStock += Number(m.quantity);
@@ -697,32 +773,13 @@ export const db = {
         recipients.push(...settings.alertEmails.split(',').map(e => e.trim()).filter(e => e));
       }
 
-      // Fallback to default emails if no specific alert emails are configured
       if (recipients.length === 0) {
         const defaultEmail = company?.sectorEmail || company?.email;
         if (defaultEmail) recipients.push(defaultEmail);
       }
 
       if (settings && recipients.length > 0) {
-        // Need full history for average consumption calculation
-        // We reuse the movements fetched earlier (line 413) but filter for this product
-        const productMovements = movements.filter(pm => pm.productId === m.productId);
-
-        // Add the newly created movement
-        const newMovement = {
-          id: data.id,
-          companyId: data.company_id,
-          movementDate: data.movement_date,
-          monthRef: data.month_ref,
-          productId: data.product_id,
-          type: data.type,
-          quantity: Number(data.quantity),
-          totalValue: Number(data.total_value),
-          createdAt: data.created_at
-        } as StockMovement;
-
-        const history = [newMovement, ...productMovements];
-
+        const history = [data, ...movements.filter(pm => pm.productId === m.productId)];
         await AlertService.processMovementAlert({
           product: product,
           currentStock: finalStock,
@@ -732,7 +789,7 @@ export const db = {
         }, this, Number(m.quantity), m.type);
       }
     } catch (alertError) {
-      console.error("Erro ao processar alertas via AlertService:", alertError);
+      console.error("Erro ao processar alertas:", alertError);
     }
 
     return data as StockMovement;
@@ -754,8 +811,6 @@ export const db = {
 
     const now = new Date();
     const currentMonth = now.toISOString().substring(0, 7);
-
-    // Previous Month Calculation
     const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const prevMonth = prevDate.toISOString().substring(0, 7);
 
@@ -764,13 +819,11 @@ export const db = {
 
     const belowMin = products.filter(p => (balanceMap[p.id] || 0) < p.minStock).length;
 
-    // Inventory Value Calculation (Top Items)
     const productValues = products.map(p => ({
       name: p.description,
       value: (balanceMap[p.id] || 0) * p.pmed
     })).sort((a, b) => b.value - a.value).slice(0, 10);
 
-    const totalInventoryValue = productValues.reduce((sum, p) => sum + p.value, 0); // This might be lower than total if we slice. Recalculate total correctly.
     const trueTotalInventoryValue = products.reduce((sum, p) => sum + ((balanceMap[p.id] || 0) * p.pmed), 0);
 
     const monthMovements = movements.filter(m => m.monthRef === currentMonth);
@@ -780,7 +833,6 @@ export const db = {
     const exitsValue = monthMovements.filter(m => m.type === MovementType.OUT).reduce((sum, m) => sum + m.totalValue, 0);
     const prevExitsValue = prevMonthMovements.filter(m => m.type === MovementType.OUT).reduce((sum, m) => sum + m.totalValue, 0);
 
-    // Most Consumed Product (Month)
     const consumptionMap: Record<string, number> = {};
     monthMovements.filter(m => m.type === MovementType.OUT).forEach(m => {
       consumptionMap[m.productId] = (consumptionMap[m.productId] || 0) + m.quantity;
@@ -794,7 +846,6 @@ export const db = {
       value: consumptionMap[mostConsumedId] * mostConsumedProductObj.pmed
     } : undefined;
 
-    // Top Consumer Sector (Month)
     const sectorConsumptionMap: Record<string, number> = {};
     monthMovements.filter(m => m.type === MovementType.OUT && m.sectorId).forEach(m => {
       sectorConsumptionMap[m.sectorId!] = (sectorConsumptionMap[m.sectorId!] || 0) + m.totalValue;
@@ -806,7 +857,6 @@ export const db = {
       value: sectorConsumptionMap[topSectorId]
     } : undefined;
 
-    // AI Insight Generation
     let aiInsight: { title: string; content: string; type: 'success' | 'warning' | 'info' } = {
       title: "Análise de Consumo",
       content: "Mantenha o controle do estoque atualizado para melhores insights.",
@@ -816,14 +866,14 @@ export const db = {
       const increase = ((exitsValue - prevExitsValue) / prevExitsValue) * 100;
       aiInsight = {
         title: "Alerta de Gasto",
-        content: `O consumo mensal aumentou ${increase.toFixed(1)}% em relação ao mês anterior. Verifique os setores com maior demanda.`,
+        content: `O consumo mensal aumentou ${increase.toFixed(1)}% em relação ao mês anterior.`,
         type: 'warning'
       };
     } else if (exitsValue < prevExitsValue && prevExitsValue > 0) {
       const decrease = ((prevExitsValue - exitsValue) / prevExitsValue) * 100;
       aiInsight = {
         title: "Economia Detectada",
-        content: `Você reduziu os gastos em ${decrease.toFixed(1)}% comparado ao mês passado. Ótimo trabalho na gestão!`,
+        content: `Você reduziu os gastos em ${decrease.toFixed(1)}% comparado ao mês passado.`,
         type: 'success'
       };
     }
@@ -848,33 +898,18 @@ export const db = {
     return (data || []).map(l => ({ id: l.id, entity: l.entity, entityId: l.entity_id, action: l.action, beforeJson: l.before_json, afterJson: l.after_json, userId: l.user_id, createdAt: l.created_at })) as AuditLog[];
   },
 
-  // Tax Analysis
   async uploadTaxDocument(file: File, companyId: string): Promise<string> {
-    // Sanitize filename
-    const fileExt = file.name.split('.').pop();
     const safeFileName = file.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     const fileName = `${companyId}/${Date.now()}-${safeFileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('tax-documents')
-      .upload(fileName, file);
-
+    const { error: uploadError } = await supabase.storage.from('tax-documents').upload(fileName, file);
     if (uploadError) throw uploadError;
-
-    // Get public URL (or signed URL if private, but using public for simplicity as per bucket config in SQL might need adjustment if private)
-    // Note: If bucket is private, we need createSignedUrl. Assuming private for security.
-    const { data, error } = await supabase.storage
-      .from('tax-documents')
-      .createSignedUrl(fileName, 60 * 60 * 24 * 365); // 1 year validity for simplicity
-
+    const { data, error } = await supabase.storage.from('tax-documents').createSignedUrl(fileName, 60 * 60 * 24 * 365);
     if (error) throw error;
-
     return data.signedUrl;
   },
 
   async createTaxAnalysisRequest(request: { companyId: string, documents: TaxDocument[] }): Promise<TaxAnalysisRequest> {
     const { data: userData } = await supabase.auth.getUser();
-
     const payload = {
       company_id: request.companyId,
       requester_user_id: userData.user?.id,
@@ -883,112 +918,41 @@ export const db = {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-
-    const { data, error } = await supabase
-      .from('tax_analysis_requests')
-      .insert(payload)
-      .select()
-      .single();
-
+    const { data, error } = await supabase.from('tax_analysis_requests').insert(payload).select().single();
     if (error) throw error;
-
     return {
-      id: data.id,
-      companyId: data.company_id,
-      requesterUserId: data.requester_user_id,
-      status: data.status,
-      documents: data.documents,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at
+      id: data.id, companyId: data.company_id, requesterUserId: data.requester_user_id,
+      status: data.status, documents: data.documents, createdAt: data.created_at, updatedAt: data.updated_at
     };
   },
 
   async getTaxAnalysisRequests(companyId: string): Promise<TaxAnalysisRequest[]> {
-    const { data, error } = await supabase
-      .from('tax_analysis_requests')
-      .select('*')
-      .eq('company_id', companyId)
-      .order('created_at', { ascending: false });
-
+    const { data, error } = await supabase.from('tax_analysis_requests').select('*').eq('company_id', companyId).order('created_at', { ascending: false });
     if (error) throw error;
-
     return (data || []).map(r => ({
-      id: r.id,
-      companyId: r.company_id,
-      requesterUserId: r.requester_user_id,
-      status: r.status,
-      documents: r.documents,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at
+      id: r.id, companyId: r.company_id, requesterUserId: r.requester_user_id,
+      status: r.status, documents: r.documents, createdAt: r.created_at, updatedAt: r.updated_at
     }));
   },
 
-  // User Management
   async getCompanyUsers(companyId: string): Promise<User[]> {
     const { data, error } = await supabase.from('profiles').select('*').eq('company_id', companyId);
     if (error) throw error;
     return (data || []).map(p => ({
-      id: p.id,
-      name: p.name,
-      email: p.email,
-      role: p.role as UserRole,
-      createdAt: p.created_at,
-      companyId: p.company_id,
-      accessCode: p.access_code,
-      permissions: p.permissions
+      id: p.id, name: p.name, email: p.email, role: p.role as UserRole,
+      createdAt: p.created_at, companyId: p.company_id, accessCode: p.access_code, permissions: p.permissions
     }));
   },
 
-  async addUser(user: { name: string; email?: string; role: UserRole; companyId: string; accessCode?: string; permissions?: any }): Promise<User> {
-    const email = user.email || `${user.name.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '')}.${Date.now().toString().slice(-4)}@aura.local`;
-
-    const { data, error } = await supabase.from('profiles').insert({
-      name: user.name,
-      email: email,
-      role: user.role,
-      company_id: user.companyId,
-      access_code: user.accessCode || '',
-      permissions: user.permissions || {}
-    }).select().single();
-
-    if (error) throw error;
-
-    return {
-      id: data.id,
-      name: data.name,
-      email: data.email,
-      role: data.role as UserRole,
-      createdAt: data.created_at,
-      companyId: data.company_id,
-      accessCode: data.access_code,
-      permissions: data.permissions
-    };
-  },
-
   async loginWithAccessCode(name: string, code: string): Promise<User | null> {
-    const { data: profiles, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .ilike('name', name)
-      .eq('access_code', code);
-
+    const { data: profiles, error } = await supabase.from('profiles').select('*').ilike('name', name).eq('access_code', code);
     if (error || !profiles || profiles.length === 0) return null;
-
     const profile = profiles[0];
     const fullUser = {
-      id: profile.id,
-      name: profile.name,
-      email: profile.email,
-      role: profile.role as UserRole,
-      createdAt: profile.created_at,
-      companyId: profile.company_id,
-      accessCode: profile.access_code,
-      permissions: profile.permissions
-    };
-
-    // Save to LocalStorage for persistence (Legacy/Simple Login)
+      id: profile.id, name: profile.name, email: profile.email, role: profile.role as UserRole,
+      createdAt: profile.created_at, companyId: profile.company_id, accessCode: profile.access_code, permissions: profile.permissions
+    } as User;
     localStorage.setItem('aura_user', JSON.stringify(fullUser));
-
     return fullUser;
   },
 
@@ -1003,9 +967,27 @@ export const db = {
   },
 
   async removeUser(userId: string): Promise<void> {
-    // Note: This only removes from profiles table. 
-    // Complete removal from auth system requires server-side admin API.
     const { error } = await supabase.from('profiles').delete().eq('id', userId);
     if (error) throw error;
+  },
+
+  async getProfilesCount(companyId: string): Promise<number> {
+    const { count } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('company_id', companyId);
+    return count || 0;
+  },
+
+  async getProductsCount(companyId: string): Promise<number> {
+    const { count } = await supabase.from('products').select('*', { count: 'exact', head: true }).eq('company_id', companyId).eq('active', true);
+    return count || 0;
+  },
+
+  async canAccessModule(companyId: string, moduleId: SystemModule): Promise<boolean> {
+    const sub = await this.getSubscription(companyId);
+    if (!sub?.plan?.features) return false;
+    return sub.plan.features.some(feature => {
+      const mappedModule = MODULE_MAPPING[feature];
+      if (feature === 'Ilimitado') return true;
+      return mappedModule === moduleId;
+    });
   }
 };

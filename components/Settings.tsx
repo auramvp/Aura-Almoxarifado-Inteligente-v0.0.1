@@ -185,6 +185,14 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
     if (!company) return;
 
     try {
+      const sub = await db.getSubscription(company.id);
+      if (sub?.plan) {
+        if (users.length >= sub.plan.maxUsers) {
+          alert(`Limite de usuários atingido para o seu plano (${sub.plan.maxUsers}). Fça upgrade para adicionar mais membros.`);
+          return;
+        }
+      }
+
       const addedUser = await db.addUser({
         name: newUser.name,
         email: newUser.email,
@@ -569,8 +577,14 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                   <p className="text-sm text-slate-400">Adicione ou remova membros da sua equipe.</p>
                 </div>
                 <button
-                  onClick={() => setShowAddUser(true)}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition flex items-center gap-2 shadow-lg shadow-blue-500/20"
+                  onClick={() => {
+                    if (subscription?.plan && users.length >= subscription.plan.maxUsers) {
+                      alert(`Limite de usuários atingido (${subscription.plan.maxUsers}).`);
+                      return;
+                    }
+                    setShowAddUser(true);
+                  }}
+                  className={`px-6 py-3 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition flex items-center gap-2 shadow-lg shadow-blue-500/20 ${subscription?.plan && users.length >= subscription.plan.maxUsers ? 'opacity-50 cursor-not-allowed grayscale' : ''}`}
                 >
                   <Plus size={16} /> Adicionar Usuário
                 </button>
@@ -805,10 +819,17 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                       <CreditCard size={120} />
                     </div>
                     <div className="relative z-10">
-                      <span className="inline-block px-3 py-1 bg-white/20 rounded-full text-[10px] font-black uppercase tracking-widest mb-4 backdrop-blur-sm border border-white/10">
-                        {subscription.plan?.name || 'Plano Personalizado'}
-                      </span>
-                      <h3 className="text-3xl font-bold mb-2">Aura Almoxarife</h3>
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="inline-block px-3 py-1 bg-white/20 rounded-full text-[10px] font-black uppercase tracking-widest backdrop-blur-sm border border-white/10">
+                          {subscription.plan?.name || 'Plano Personalizado'}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                          <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Assinatura Ativa</span>
+                        </div>
+                      </div>
+
+                      <h3 className="text-3xl font-bold mb-2">Aura Almoxarifado</h3>
                       <p className="text-blue-100 mb-8 opacity-80">
                         {subscription.status === 'active'
                           ? `Próxima renovação em ${new Date(subscription.nextBillingDate).toLocaleDateString('pt-BR')}`
@@ -826,37 +847,56 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                        <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm border border-white/5">
-                          <p className="text-[10px] uppercase tracking-widest opacity-70 mb-1">Usuários</p>
-                          <p className="font-bold text-lg">{subscription.plan?.maxUsers === 999 ? 'Ilimitado' : subscription.plan?.maxUsers} <span className="text-xs font-normal opacity-70">usuários</span></p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm border border-white/10">
+                          <div className="flex justify-between items-end mb-2">
+                            <p className="text-[10px] uppercase tracking-widest opacity-70">Usuários</p>
+                            <p className="text-[10px] font-bold">{users.length} / {subscription.plan?.maxUsers === 999 ? '∞' : subscription.plan?.maxUsers}</p>
+                          </div>
+                          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-white transition-all duration-1000"
+                              style={{ width: `${Math.min(100, (users.length / (subscription.plan?.maxUsers || 1)) * 100)}%` }}
+                            />
+                          </div>
                         </div>
-                        <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm border border-white/5">
-                          <p className="text-[10px] uppercase tracking-widest opacity-70 mb-1">Itens</p>
-                          <p className="font-bold text-lg">{subscription.plan?.maxItems === 9999 ? 'Ilimitado' : subscription.plan?.maxItems} <span className="text-xs font-normal opacity-70">itens</span></p>
+                        <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm border border-white/10">
+                          <div className="flex justify-between items-end mb-2">
+                            <p className="text-[10px] uppercase tracking-widest opacity-70">Cadastro de Itens</p>
+                            <p className="text-[10px] font-bold">Monitorado</p>
+                          </div>
+                          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-white transition-all duration-1000"
+                              style={{ width: `75%` }}
+                            />
+                          </div>
                         </div>
                       </div>
 
-                      {subscription.plan?.features && subscription.plan.features.length > 0 && (
-                        <div className="mb-8 space-y-2">
-                          <p className="text-[10px] uppercase tracking-widest opacity-70 mb-2">Benefícios Inclusos</p>
-                          <div className="flex flex-wrap gap-2">
-                            {subscription.plan.features.map((feature, idx) => (
-                              <div key={idx} className="flex items-center gap-1.5 bg-white/10 border border-white/10 rounded-lg px-3 py-1.5 backdrop-blur-sm">
-                                <CheckCircle2 size={12} className="text-blue-300" />
-                                <span className="text-xs font-medium text-blue-50">{feature}</span>
+                      <div className="mb-8 p-4 bg-white/5 rounded-2xl border border-white/5">
+                        <p className="text-[10px] uppercase tracking-widest opacity-70 mb-3">Recursos do seu Plano</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {subscription.plan?.features?.map((feature: string, idx: number) => (
+                            <div key={idx} className="flex items-center gap-2 group">
+                              <div className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center group-hover:bg-emerald-500/40 transition">
+                                <CheckCircle2 size={12} className="text-emerald-400" />
                               </div>
-                            ))}
-                          </div>
+                              <span className="text-xs font-medium text-blue-50">{feature}</span>
+                            </div>
+                          ))}
                         </div>
-                      )}
+                      </div>
 
                       <div className="flex flex-wrap gap-4">
-                        <button className="px-6 py-3 bg-white text-blue-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-50 transition shadow-lg flex items-center gap-2">
-                          <Plus size={16} /> Fazer Upgrade
+                        <button
+                          onClick={() => window.open('https://cakto.com.br/aura/upgrade', '_blank')}
+                          className="px-8 py-4 bg-white text-blue-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-50 transition shadow-xl shadow-blue-900/40 flex items-center gap-2 group active:scale-95"
+                        >
+                          Trocar de Plano <ChevronRight size={16} className="group-hover:translate-x-1 transition" />
                         </button>
-                        <button className="px-6 py-3 bg-red-500/20 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-red-500/40 transition backdrop-blur-sm border border-red-400/20">
-                          Cancelar Assinatura
+                        <button className="px-8 py-4 bg-white/5 text-white/60 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-white/10 hover:text-white transition backdrop-blur-sm border border-white/10 active:scale-95">
+                          Gerenciar Faturamento
                         </button>
                       </div>
                     </div>

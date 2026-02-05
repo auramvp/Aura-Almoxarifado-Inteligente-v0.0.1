@@ -12,7 +12,7 @@ const Products = ({ user }: any) => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [balances, setBalances] = useState<StockBalance[]>([]);
-  
+
   // Search and Filter States
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -41,19 +41,26 @@ const Products = ({ user }: any) => {
   // Display value for currency mask
   const [displayPmed, setDisplayPmed] = useState('');
 
+  const [subscription, setSubscription] = useState<any>(null);
+  const [counts, setCounts] = useState({ products: 0, items: 0 });
+
   const canEdit = user.role === UserRole.ALMOXARIFE || user.permissions?.products === 'full';
 
   const refreshData = async () => {
-    const [ps, cs, ss, bs] = await Promise.all([
+    const [ps, cs, ss, bs, sub, pCount] = await Promise.all([
       db.getProducts(),
       db.getCategories(),
       db.getSuppliers(),
-      db.getStockBalances()
+      db.getStockBalances(),
+      db.getSubscription(user.companyId),
+      db.getProductsCount(user.companyId)
     ]);
     setProducts(ps);
     setCategories(cs);
     setSuppliers(ss);
     setBalances(bs);
+    setSubscription(sub);
+    setCounts({ products: pCount, items: ps.length });
   };
 
   useEffect(() => {
@@ -104,16 +111,16 @@ const Products = ({ user }: any) => {
       setDisplayPmed(formatBRL(p.pmed));
     } else {
       setEditingProduct(null);
-      setFormData({ 
-        cod: '', 
-        description: '', 
-        unit: 'U', 
-        minStock: 0, 
-        categoryId: '', 
-        defaultSupplierId: '', 
+      setFormData({
+        cod: '',
+        description: '',
+        unit: 'U',
+        minStock: 0,
+        categoryId: '',
+        defaultSupplierId: '',
         storageLocation: '',
         observations: '',
-        pmed: 0 
+        pmed: 0
       });
       setDisplayPmed(formatBRL(0));
     }
@@ -157,11 +164,11 @@ const Products = ({ user }: any) => {
 
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          p.cod.toLowerCase().includes(searchTerm.toLowerCase());
+      p.cod.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || p.categoryId === selectedCategory;
     const matchesSupplier = selectedSupplier === 'all' || p.defaultSupplierId === selectedSupplier;
     const matchesLocation = selectedLocation === 'all' || p.storageLocation === selectedLocation;
-    
+
     return matchesSearch && matchesCategory && matchesSupplier && matchesLocation;
   });
 
@@ -171,20 +178,34 @@ const Products = ({ user }: any) => {
         <div>
           <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Catálogo de Produtos</h2>
           <p className="text-slate-500 dark:text-slate-400">Gerencie o cadastro completo de itens do estoque.</p>
+          {subscription?.plan && (
+            <div className="mt-2 flex items-center gap-2">
+              <div className="flex-1 max-w-[200px] h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className={`h-full transition-all ${counts.products >= subscription.plan.maxItems ? 'bg-red-500' : 'bg-blue-500'}`}
+                  style={{ width: `${Math.min(100, (counts.products / subscription.plan.maxItems) * 100)}%` }}
+                />
+              </div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase">
+                {counts.products} / {subscription.plan.maxItems} Itens no Plano
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex gap-2">
           {canEdit && (
             <>
-              <button 
+              <button
                 onClick={() => setIsCategoryModalOpen(true)}
                 className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition font-medium border border-slate-200 dark:border-slate-700 shadow-sm"
               >
                 <Tags size={18} />
                 Categorias
               </button>
-              <button 
+              <button
                 onClick={() => handleOpenModal()}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium shadow-md shadow-blue-100"
+                disabled={subscription?.plan && counts.products >= subscription.plan.maxItems}
+                className={`flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium shadow-md shadow-blue-100 ${(subscription?.plan && counts.products >= subscription.plan.maxItems) ? 'opacity-50 cursor-not-allowed grayscale' : ''}`}
               >
                 <Plus size={20} />
                 Novo Produto
@@ -199,14 +220,14 @@ const Products = ({ user }: any) => {
           <Filter size={18} className="text-blue-600 dark:text-blue-500" />
           <h3>Filtros de Busca</h3>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="relative">
             <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase mb-1">Pesquisar</label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <input 
-                type="text" 
+              <input
+                type="text"
                 placeholder="Nome ou código..."
                 className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm outline-none"
                 value={searchTerm}
@@ -217,7 +238,7 @@ const Products = ({ user }: any) => {
 
           <div>
             <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase mb-1">Categoria</label>
-            <select 
+            <select
               className="w-full px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm outline-none"
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
@@ -231,7 +252,7 @@ const Products = ({ user }: any) => {
 
           <div>
             <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase mb-1">Fornecedor</label>
-            <select 
+            <select
               className="w-full px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm outline-none"
               value={selectedSupplier}
               onChange={(e) => setSelectedSupplier(e.target.value)}
@@ -245,7 +266,7 @@ const Products = ({ user }: any) => {
 
           <div>
             <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase mb-1">Local de Armazenamento</label>
-            <select 
+            <select
               className="w-full px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm outline-none"
               value={selectedLocation}
               onChange={(e) => setSelectedLocation(e.target.value)}
@@ -260,7 +281,7 @@ const Products = ({ user }: any) => {
 
         {(searchTerm !== '' || selectedCategory !== 'all' || selectedSupplier !== 'all' || selectedLocation !== 'all') && (
           <div className="flex justify-end pt-2">
-            <button 
+            <button
               onClick={resetFilters}
               className="flex items-center gap-1 text-xs font-bold text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition uppercase tracking-wider"
             >
@@ -313,7 +334,7 @@ const Products = ({ user }: any) => {
                       {category ? (
                         <div className="flex items-center gap-2">
                           <span className="text-lg">{category.emoji}</span>
-                          <span 
+                          <span
                             className="px-2 py-0.5 rounded text-xs font-medium text-white shadow-sm"
                             style={{ backgroundColor: category.color }}
                           >
@@ -338,14 +359,14 @@ const Products = ({ user }: any) => {
                     </td>
                     <td className="px-6 py-4 text-center">
                       <div className="flex items-center justify-center gap-2">
-                        <button 
+                        <button
                           onClick={() => handleViewDetails(p)}
                           className="p-1.5 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition" title="Ver Detalhes"
                         >
                           <Eye size={18} />
                         </button>
                         {canEdit && (
-                          <button 
+                          <button
                             onClick={() => handleOpenModal(p)}
                             className="p-1.5 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition" title="Editar"
                           >
@@ -368,7 +389,7 @@ const Products = ({ user }: any) => {
         </div>
       </div>
 
-      <ManageCategoriesModal 
+      <ManageCategoriesModal
         isOpen={isCategoryModalOpen}
         onClose={() => setIsCategoryModalOpen(false)}
         onCategoryChange={() => refreshData()}
@@ -386,17 +407,17 @@ const Products = ({ user }: any) => {
                 <X size={20} />
               </button>
             </div>
-            
+
             <form onSubmit={handleSave} className="p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="md:col-span-2">
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 flex items-center gap-1">
                     <Box size={14} /> Nome do Produto
                   </label>
-                  <input 
+                  <input
                     required
                     placeholder="Ex: Caixa de Papelão Reforçada"
-                    type="text" 
+                    type="text"
                     className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition outline-none"
                     value={formData.description}
                     onChange={e => setFormData({ ...formData, description: e.target.value })}
@@ -407,10 +428,10 @@ const Products = ({ user }: any) => {
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 flex items-center gap-1">
                     <Hash size={14} /> Código
                   </label>
-                  <input 
+                  <input
                     required
                     placeholder="EMB-001"
-                    type="text" 
+                    type="text"
                     className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition font-mono outline-none"
                     value={formData.cod}
                     onChange={e => setFormData({ ...formData, cod: e.target.value })}
@@ -421,7 +442,7 @@ const Products = ({ user }: any) => {
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 flex items-center gap-1">
                     <Tag size={14} /> Categoria
                   </label>
-                  <select 
+                  <select
                     required
                     className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition outline-none"
                     value={formData.categoryId}
@@ -438,7 +459,7 @@ const Products = ({ user }: any) => {
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 flex items-center gap-1">
                     <Truck size={14} /> Fornecedor Padrão
                   </label>
-                  <select 
+                  <select
                     className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition outline-none"
                     value={formData.defaultSupplierId}
                     onChange={e => setFormData({ ...formData, defaultSupplierId: e.target.value })}
@@ -454,10 +475,10 @@ const Products = ({ user }: any) => {
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 flex items-center gap-1">
                     <Warehouse size={14} /> Local de Armazenamento
                   </label>
-                  <input 
+                  <input
                     required
                     placeholder="Ex: Prateleira A1, Corredor 2"
-                    type="text" 
+                    type="text"
                     className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition outline-none"
                     value={formData.storageLocation}
                     onChange={e => setFormData({ ...formData, storageLocation: e.target.value })}
@@ -468,7 +489,7 @@ const Products = ({ user }: any) => {
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 flex items-center gap-1">
                     <Ruler size={14} /> Unidade de Medida
                   </label>
-                  <select 
+                  <select
                     required
                     className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition outline-none"
                     value={formData.unit}
@@ -484,7 +505,7 @@ const Products = ({ user }: any) => {
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 flex items-center gap-1">
                     <AlertTriangle size={14} /> Estoque Mínimo
                   </label>
-                  <input 
+                  <input
                     required
                     type="number" min="0"
                     className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition outline-none"
@@ -497,7 +518,7 @@ const Products = ({ user }: any) => {
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 flex items-center gap-1">
                     <FileText size={14} /> Observações Adicionais
                   </label>
-                  <textarea 
+                  <textarea
                     placeholder="Informações extras..."
                     className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition min-h-[100px] resize-none outline-none"
                     value={formData.observations}
@@ -507,14 +528,14 @@ const Products = ({ user }: any) => {
               </div>
 
               <div className="pt-6 flex gap-3 border-t border-slate-100 dark:border-slate-800">
-                <button 
+                <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
                   className="flex-1 py-3 px-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-lg font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition outline-none"
                 >
                   Cancelar
                 </button>
-                <button 
+                <button
                   type="submit"
                   className="flex-1 py-3 px-4 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-lg shadow-blue-100 dark:shadow-none outline-none"
                 >
@@ -539,77 +560,77 @@ const Products = ({ user }: any) => {
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="md:col-span-2 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-700">
-                   <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Descrição</p>
-                   <p className="text-lg font-bold text-slate-800 dark:text-slate-100">{viewingProduct.description}</p>
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Descrição</p>
+                  <p className="text-lg font-bold text-slate-800 dark:text-slate-100">{viewingProduct.description}</p>
                 </div>
 
                 <div>
-                   <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Código</p>
-                   <p className="font-mono text-slate-700 dark:text-slate-300">{viewingProduct.cod}</p>
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Código</p>
+                  <p className="font-mono text-slate-700 dark:text-slate-300">{viewingProduct.cod}</p>
                 </div>
 
                 <div>
-                   <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Categoria</p>
-                   {categories.find(c => c.id === viewingProduct.categoryId) ? (
-                     <div className="flex items-center gap-2">
-                       <span>{categories.find(c => c.id === viewingProduct.categoryId)?.emoji}</span>
-                       <span className="font-medium">{categories.find(c => c.id === viewingProduct.categoryId)?.name}</span>
-                     </div>
-                   ) : <span className="text-slate-400 italic">Sem categoria</span>}
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Categoria</p>
+                  {categories.find(c => c.id === viewingProduct.categoryId) ? (
+                    <div className="flex items-center gap-2">
+                      <span>{categories.find(c => c.id === viewingProduct.categoryId)?.emoji}</span>
+                      <span className="font-medium">{categories.find(c => c.id === viewingProduct.categoryId)?.name}</span>
+                    </div>
+                  ) : <span className="text-slate-400 italic">Sem categoria</span>}
                 </div>
 
                 <div>
-                   <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Fornecedor Padrão</p>
-                   <p className="font-medium text-slate-700 dark:text-slate-300">
-                     {suppliers.find(s => s.id === viewingProduct.defaultSupplierId)?.name || <span className="text-slate-400 italic">Não definido</span>}
-                   </p>
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Fornecedor Padrão</p>
+                  <p className="font-medium text-slate-700 dark:text-slate-300">
+                    {suppliers.find(s => s.id === viewingProduct.defaultSupplierId)?.name || <span className="text-slate-400 italic">Não definido</span>}
+                  </p>
                 </div>
 
                 <div>
-                   <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Local de Armazenamento</p>
-                   <p className="font-medium text-slate-700 dark:text-slate-300">{viewingProduct.storageLocation || '-'}</p>
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Local de Armazenamento</p>
+                  <p className="font-medium text-slate-700 dark:text-slate-300">{viewingProduct.storageLocation || '-'}</p>
                 </div>
 
                 <div>
-                   <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Unidade</p>
-                   <p className="font-medium text-slate-700 dark:text-slate-300">{viewingProduct.unit}</p>
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Unidade</p>
+                  <p className="font-medium text-slate-700 dark:text-slate-300">{viewingProduct.unit}</p>
                 </div>
 
                 <div>
-                   <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Estoque Mínimo</p>
-                   <p className="font-medium text-slate-700 dark:text-slate-300">{viewingProduct.minStock}</p>
-                </div>
-                
-                <div>
-                   <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Saldo Atual</p>
-                   <p className={`font-bold text-lg ${(balanceMap[viewingProduct.id] || 0) < viewingProduct.minStock ? 'text-red-600' : 'text-slate-800 dark:text-slate-200'}`}>
-                     {balanceMap[viewingProduct.id] || 0}
-                   </p>
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Estoque Mínimo</p>
+                  <p className="font-medium text-slate-700 dark:text-slate-300">{viewingProduct.minStock}</p>
                 </div>
 
                 <div>
-                   <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Custo (Preço Médio)</p>
-                   <p className="font-bold text-slate-800 dark:text-slate-200">
-                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(viewingProduct.pmed)}
-                   </p>
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Saldo Atual</p>
+                  <p className={`font-bold text-lg ${(balanceMap[viewingProduct.id] || 0) < viewingProduct.minStock ? 'text-red-600' : 'text-slate-800 dark:text-slate-200'}`}>
+                    {balanceMap[viewingProduct.id] || 0}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Custo (Preço Médio)</p>
+                  <p className="font-bold text-slate-800 dark:text-slate-200">
+                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(viewingProduct.pmed)}
+                  </p>
                 </div>
 
                 {viewingProduct.observations && (
                   <div className="md:col-span-2">
-                     <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Observações</p>
-                     <p className="text-sm text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700">
-                       {viewingProduct.observations}
-                     </p>
+                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Observações</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700">
+                      {viewingProduct.observations}
+                    </p>
                   </div>
                 )}
               </div>
 
               <div className="pt-6 flex justify-end border-t border-slate-100 dark:border-slate-800">
-                <button 
+                <button
                   onClick={() => setIsDetailsModalOpen(false)}
                   className="py-2 px-6 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition outline-none"
                 >

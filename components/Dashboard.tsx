@@ -6,6 +6,7 @@ import {
   AlertTriangle, TrendingDown, PackageCheck, Building2, Loader2, Sparkles, History, ArrowUpRight, ArrowDownRight, Package, Wallet, TrendingUp
 } from 'lucide-react';
 import { User, DashboardStats, Company, Product, MovementType } from '../types';
+import DashboardBanner from './DashboardBanner';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
@@ -63,6 +64,12 @@ const Dashboard = ({ user }: { user: User }) => {
           <p className="text-slate-500 dark:text-slate-400 text-sm">Acompanhe a saúde operacional do seu almoxarifado.</p>
         </div>
       </header>
+
+      <DashboardBanner
+        id="main-dashboard-banner"
+        imageUrl="/dashboard_banner.png"
+        link="https://auraalmoxarifado.com.br"
+      />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
