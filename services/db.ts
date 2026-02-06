@@ -366,7 +366,7 @@ export const db = {
       contactExtra: data.contact_extra,
       settings: data.settings,
       status: data.status || 'active',
-      suspensionReason: data.suspension_reason,
+      suspensionReason: data.status_reason,
       planId: data.plan_id,
       createdAt: data.created_at
     };

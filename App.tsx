@@ -590,7 +590,7 @@ const App = () => {
     const checkCompanyStatus = async () => {
       try {
         const companyStatus = await db.getCompanyById(user.companyId!);
-        if (companyStatus && companyStatus.status === 'suspended') {
+        if (companyStatus && companyStatus.status === 'Suspenso') {
           setShowSuspendedModal(true);
         } else {
           setShowSuspendedModal(false);

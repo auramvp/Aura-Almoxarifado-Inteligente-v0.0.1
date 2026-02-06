@@ -4,7 +4,7 @@ export enum UserRole {
   AUX_ALMOXARIFE = 'AUX_ALMOXARIFE'
 }
 
-export type CompanyStatus = 'active' | 'suspended' | 'blocked';
+export type CompanyStatus = 'Ativo' | 'Suspenso' | 'Bloqueado' | 'Pendente' | 'active' | 'suspended' | 'blocked';
 
 export interface SupportTicket {
   id: string;
