@@ -59,6 +59,14 @@ const Dashboard = ({ user }: { user: User }) => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+      {banners.map((banner) => (
+        <DashboardBanner
+          key={banner.id}
+          imageUrl={banner.image_url}
+          link={banner.destination_url}
+        />
+      ))}
+
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -67,14 +75,6 @@ const Dashboard = ({ user }: { user: User }) => {
           <p className="text-slate-500 dark:text-slate-400 text-sm">Acompanhe a saúde operacional do seu almoxarifado.</p>
         </div>
       </header>
-
-      {banners.map((banner) => (
-        <DashboardBanner
-          key={banner.id}
-          imageUrl={banner.image_url}
-          link={banner.destination_url}
-        />
-      ))}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
