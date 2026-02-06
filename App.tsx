@@ -626,32 +626,39 @@ const App = () => {
       ) : (
         <div className={`h-screen flex bg-[#F8FAFC] dark:bg-slate-950 transition-colors duration-300 font-sans overflow-hidden`}>
           {/* Suspended Modal */}
-          {showSuspendedModal && (
+          {showSuspendedModal && company && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-6">
               <div className="bg-white dark:bg-slate-900 rounded-[32px] p-10 max-w-lg w-full text-center space-y-6 shadow-2xl border border-red-100 dark:border-red-900/30">
                 <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-3xl flex items-center justify-center mx-auto animate-bounce">
                   <AlertCircle size={40} />
                 </div>
                 <div className="space-y-2">
-                  <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Sistema Suspenso</h2>
+                  <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Acesso Suspenso</h2>
                   <p className="text-slate-500 dark:text-slate-400 font-bold leading-relaxed">
-                    Ops! Identificamos uma pendência na sua assinatura. Para continuar otimizando seu almoxarifado, regularize seu acesso.
+                    O acesso da empresa <span className="text-slate-700 dark:text-slate-300">{company.name}</span> foi temporariamente suspenso.
                   </p>
                 </div>
-                <button
-                  onClick={() => window.open('https://cakto.com.br/aura/fatura', '_blank')}
-                  className="w-full py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-500/20 active:scale-95 transition-all flex items-center justify-center gap-3"
-                >
-                  Regularizar Agora <ChevronRight size={20} />
-                </button>
+                {company.suspensionReason && (
+                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl p-5 text-left">
+                    <p className="text-sm font-bold text-red-900 dark:text-red-200 mb-1">Motivo da Suspensão:</p>
+                    <p className="text-sm text-red-700 dark:text-red-300">{company.suspensionReason}</p>
+                  </div>
+                )}
+                <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-5">
+                  <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                    Para reativar o acesso, entre em contato com o suporte ou resolva as pendências indicadas. Seus dados estão seguros.
+                  </p>
+                </div>
                 <button
                   onClick={async () => {
                     await db.logout();
                     setUser(null);
+                    setCompany(null);
+                    setShowSuspendedModal(false);
                   }}
-                  className="flex items-center gap-2 text-slate-400 hover:text-slate-600 font-bold mx-auto text-sm transition-colors"
+                  className="w-full py-5 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3"
                 >
-                  Sair da conta
+                  <LogOut size={20} /> Fazer Logout
                 </button>
               </div>
             </div>
