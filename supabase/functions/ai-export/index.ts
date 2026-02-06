@@ -14,13 +14,16 @@ Deno.serve(async (req: Request) => {
     try {
         const { products, suppliers, movements, userRequest } = await req.json();
 
-        const apiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('API_KEY');
+        // Use OPENAI_API_KEY for OpenRouter (same as VITE_OPENAI_API_KEY)
+        const apiKey = Deno.env.get('OPENAI_API_KEY');
+        const modelName = Deno.env.get('AI_MODEL') || 'gpt-oss-120b';
+
         if (!apiKey) {
-            throw new Error('API key not configured');
+            throw new Error('OPENAI_API_KEY not configured in Supabase Secrets');
         }
 
         // Prepare data summaries for the AI
-        const productsSummary = products.slice(0, 10).map((p: any) => ({
+        const productsSummary = products.slice(0, 15).map((p: any) => ({
             codigo: p.cod,
             nome: p.description,
             categoria: p.category,
@@ -28,7 +31,7 @@ Deno.serve(async (req: Request) => {
             estoqueMinimo: p.minStock
         }));
 
-        const movementsSummary = movements.slice(0, 10).map((m: any) => ({
+        const movementsSummary = movements.slice(0, 15).map((m: any) => ({
             data: m.date,
             produto: m.productName,
             tipo: m.type,
@@ -37,9 +40,19 @@ Deno.serve(async (req: Request) => {
         }));
 
         // Build the AI prompt
-        const prompt = `Você é um assistente especializado em gerar relatórios de dados de almoxarifado.
+        const systemPrompt = `Você é um assistente especializado em gerar relatórios de dados de almoxarifado.
+Você recebe dados reais de produtos, movimentações e fornecedores.
+Seu trabalho é processar esses dados e retornar um relatório estruturado em JSON.
 
-DADOS DISPONÍVEIS:
+REGRAS IMPORTANTES:
+- Use NOMES, nunca IDs
+- Formate datas como DD/MM/AAAA
+- Formate valores monetários com R$
+- Agrupe e totalize conforme solicitado
+- Gere dados reais baseados nos dados fornecidos
+- Responda APENAS com JSON válido, sem texto adicional`;
+
+        const userPrompt = `DADOS DISPONÍVEIS:
 - ${products.length} produtos cadastrados
 - ${suppliers.length} fornecedores
 - ${movements.length} movimentações
@@ -52,7 +65,6 @@ ${JSON.stringify(movementsSummary, null, 2)}
 
 PEDIDO DO USUÁRIO: "${userRequest}"
 
-Com base nos dados fornecidos, gere o relatório solicitado.
 Retorne APENAS um JSON válido com esta estrutura:
 {
   "fileName": "nome_arquivo.xlsx",
@@ -61,39 +73,34 @@ Retorne APENAS um JSON válido com esta estrutura:
     { "coluna1": "valor1", "coluna2": "valor2" },
     ...
   ]
-}
+}`;
 
-IMPORTANTE:
-- Use NOMES, nunca IDs
-- Formate datas como DD/MM/AAAA
-- Formate valores monetários com R$
-- Agrupe e totalize conforme solicitado
-- Gere dados reais baseados nas amostras fornecidas`;
-
-        // Call Gemini API
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: {
-                        temperature: 0.2,
-                        maxOutputTokens: 8192
-                    }
-                })
-            }
-        );
+        // Call OpenRouter API (OpenAI-compatible)
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: modelName,
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: userPrompt }
+                ],
+                temperature: 0.2,
+                max_tokens: 4000
+            })
+        });
 
         if (!response.ok) {
             const error = await response.text();
-            console.error('Gemini API error:', error);
+            console.error('OpenRouter API error:', error);
             throw new Error('Erro ao chamar a API de IA');
         }
 
         const aiResult = await response.json();
-        const text = aiResult.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const text = aiResult.choices?.[0]?.message?.content || '';
 
         // Extract JSON from response
         const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -107,30 +114,52 @@ IMPORTANTE:
         // If the AI gave generic data, let's enhance with real data
         let finalData = result.data;
 
-        // Process common report types
+        // Process common report types with real data
         if (userRequest.toLowerCase().includes('moviment') && userRequest.toLowerCase().includes('produto')) {
             // Group movements by product
-            const productTotals: Record<string, { entradas: number; saidas: number; valorTotal: number }> = {};
+            const productTotals: Record<string, { entradas: number; saidas: number; valorEntrada: number; valorSaida: number; categoria?: string; codigo?: string; estoqueMinimo?: number; estoque?: number }> = {};
+
+            // Get product info map
+            const productInfoMap: Record<string, any> = {};
+            products.forEach((p: any) => {
+                productInfoMap[p.description] = p;
+            });
 
             movements.forEach((m: any) => {
                 const key = m.productName || m.productCode;
                 if (!productTotals[key]) {
-                    productTotals[key] = { entradas: 0, saidas: 0, valorTotal: 0 };
+                    const prodInfo = productInfoMap[key] || {};
+                    productTotals[key] = {
+                        entradas: 0,
+                        saidas: 0,
+                        valorEntrada: 0,
+                        valorSaida: 0,
+                        categoria: prodInfo.category || '',
+                        codigo: prodInfo.cod || m.productCode || '',
+                        estoqueMinimo: prodInfo.minStock || 0,
+                        estoque: prodInfo.stock || 0
+                    };
                 }
                 if (m.type === 'Entrada') {
                     productTotals[key].entradas += m.quantity;
+                    productTotals[key].valorEntrada += m.value || 0;
                 } else {
                     productTotals[key].saidas += m.quantity;
+                    productTotals[key].valorSaida += m.value || 0;
                 }
-                productTotals[key].valorTotal += m.value || 0;
             });
 
             finalData = Object.entries(productTotals).map(([produto, totais]) => ({
+                'Código': totais.codigo,
                 'Produto': produto,
+                'Categoria': totais.categoria,
                 'Total Entradas': totais.entradas,
                 'Total Saídas': totais.saidas,
                 'Saldo': totais.entradas - totais.saidas,
-                'Valor Total': `R$ ${totais.valorTotal.toFixed(2)}`
+                'R$ Entrada': `R$ ${totais.valorEntrada.toFixed(2)}`,
+                'R$ Saída': `R$ ${totais.valorSaida.toFixed(2)}`,
+                'Estoque Mínimo': totais.estoqueMinimo,
+                'Estoque Atual': totais.estoque
             }));
         } else if (userRequest.toLowerCase().includes('estoque') && userRequest.toLowerCase().includes('baixo')) {
             // Low stock products
@@ -149,7 +178,7 @@ IMPORTANTE:
             const monthlyTotals: Record<string, { entradas: number; saidas: number; valor: number }> = {};
 
             movements.forEach((m: any) => {
-                const month = m.date.substring(0, 7); // YYYY-MM
+                const month = m.date?.substring(0, 7) || 'Sem Data'; // YYYY-MM
                 if (!monthlyTotals[month]) {
                     monthlyTotals[month] = { entradas: 0, saidas: 0, valor: 0 };
                 }

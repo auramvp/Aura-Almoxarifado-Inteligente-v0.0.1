@@ -1054,9 +1054,17 @@ const ImportExport = ({ user }: any) => {
     }
   };
 
-  // AI-powered custom export
+  // AI-powered custom export - using same API as aiReportService
   const handleAiExport = async () => {
     if (!aiExportPrompt.trim()) return;
+
+    const API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
+    const MODEL_NAME = import.meta.env.VITE_AI_MODEL || 'gpt-oss-120b';
+
+    if (!API_KEY) {
+      setAiExportError('Chave de API da IA não configurada (VITE_OPENAI_API_KEY)');
+      return;
+    }
 
     setIsAiExporting(true);
     setAiExportError('');
@@ -1083,87 +1091,213 @@ const ImportExport = ({ user }: any) => {
         }
       });
 
-      // Prepare data summary for AI
+      // Prepare enriched data for processing
+      const enrichedProducts = allProducts.map(p => ({
+        cod: p.cod,
+        description: p.description,
+        category: categoryMap.get(p.categoryId || '') || '',
+        minStock: p.minStock,
+        stock: stockMap[p.id] || 0
+      }));
+
+      const enrichedMovements = allMovements.map(m => {
+        const prod = productMap.get(m.productId);
+        return {
+          date: m.movementDate,
+          productCode: prod?.cod || '',
+          productName: prod?.description || '',
+          productCategory: prod?.categoryId ? categoryMap.get(prod.categoryId) || '' : '',
+          type: m.type === MovementType.IN ? 'Entrada' : 'Saída',
+          quantity: m.quantity,
+          value: m.totalValue || 0,
+          destination: m.destination || ''
+        };
+      });
+
+      // Build data summary for AI
       const dataSummary = {
-        produtos: allProducts.slice(0, 5).map(p => ({
-          codigo: p.cod,
-          descricao: p.description,
-          categoria: categoryMap.get(p.categoryId || '') || '',
-          unidade: p.unit,
-          estoqueMinimo: p.minStock,
-          saldoAtual: stockMap[p.id] || 0
-        })),
-        fornecedores: allSuppliers.slice(0, 3).map(s => ({ nome: s.name, cnpj: s.cnpj })),
-        movimentacoes: allMovements.slice(0, 5).map(m => {
-          const prod = productMap.get(m.productId);
-          return {
-            data: m.movementDate,
-            produto: prod?.description || '',
-            tipo: m.type,
-            quantidade: m.quantity,
-            valor: m.totalValue
-          };
-        }),
+        produtos: enrichedProducts.slice(0, 10),
+        movimentacoes: enrichedMovements.slice(0, 10),
         totalProdutos: allProducts.length,
         totalFornecedores: allSuppliers.length,
         totalMovimentacoes: allMovements.length
       };
 
-      const prompt = `Você é um assistente de exportação de dados. O usuário quer gerar uma planilha personalizada.
+      const systemPrompt = `Você é um assistente de exportação de planilhas de almoxarifado.
+O usuário vai pedir um relatório personalizado e você deve retornar APENAS um JSON válido.
+Use NOMES, nunca IDs. Formate valores monetários com R$.`;
 
-DADOS DISPONÍVEIS (amostra):
+      const userPrompt = `DADOS DISPONÍVEIS:
 ${JSON.stringify(dataSummary, null, 2)}
 
-PEDIDO DO USUÁRIO: "${aiExportPrompt}"
+PEDIDO: "${aiExportPrompt}"
 
-Gere um JSON com a estrutura da planilha solicitada. Responda APENAS com JSON válido no formato:
+Retorne APENAS JSON:
 {
-  "fileName": "nome_do_arquivo.xlsx",
-  "sheetName": "Nome da Aba",
-  "columns": ["Coluna1", "Coluna2", ...],
-  "dataQuery": "tipo de query: 'movimentos_por_produto' | 'estoque_baixo' | 'movimentos_por_mes' | 'produtos_sem_movimento' | 'resumo_geral' | 'custom'"
+  "fileName": "nome_arquivo.xlsx",
+  "sheetName": "Aba",
+  "reportType": "movimentos_por_produto" | "estoque_baixo" | "mensal" | "custom"
 }`;
 
-      const { data: result, error: invokeError } = await supabase.functions.invoke('ai-export', {
-        body: {
-          products: allProducts.map(p => ({
-            id: p.id,
-            cod: p.cod,
-            description: p.description,
-            category: categoryMap.get(p.categoryId || '') || '',
-            minStock: p.minStock,
-            stock: stockMap[p.id] || 0
-          })),
-          suppliers: allSuppliers.map(s => ({ name: s.name, cnpj: s.cnpj })),
-          movements: allMovements.map(m => {
-            const prod = productMap.get(m.productId);
-            return {
-              date: m.movementDate,
-              productCode: prod?.cod || '',
-              productName: prod?.description || '',
-              type: m.type === MovementType.IN ? 'Entrada' : 'Saída',
-              quantity: m.quantity,
-              value: m.totalValue,
-              destination: m.destination
-            };
-          }),
-          userRequest: aiExportPrompt
-        }
+      // Call OpenRouter API directly (same as aiReportService)
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: MODEL_NAME,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          temperature: 0.2,
+          max_tokens: 1000
+        })
       });
 
-      if (invokeError) {
-        throw new Error(invokeError.message || 'Erro na comunicação com a IA');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Erro na API (${response.status}): ${errorData.error?.message || response.statusText}`);
       }
 
-      if (result.data && result.fileName) {
-        const ws = XLSX.utils.json_to_sheet(result.data);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, result.sheetName || 'Dados');
-        XLSX.writeFile(wb, result.fileName);
-        setAiExportPrompt('');
-      } else {
-        throw new Error('Resposta inválida da IA');
+      const aiResult = await response.json();
+      const text = aiResult.choices?.[0]?.message?.content || '';
+
+      // Extract JSON from response
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('Resposta da IA não contém JSON válido');
       }
+
+      const aiConfig = JSON.parse(jsonMatch[0]);
+      let finalData: any[] = [];
+      const requestLower = aiExportPrompt.toLowerCase();
+
+      // Process based on report type or request keywords
+      if (requestLower.includes('moviment') && requestLower.includes('produto')) {
+        // Group movements by product with all requested info
+        const productTotals: Record<string, any> = {};
+
+        enrichedMovements.forEach(m => {
+          const key = m.productName || m.productCode;
+          if (!productTotals[key]) {
+            const prod = enrichedProducts.find(p => p.description === m.productName);
+            productTotals[key] = {
+              codigo: m.productCode,
+              categoria: m.productCategory,
+              entradas: 0,
+              saidas: 0,
+              valorEntrada: 0,
+              valorSaida: 0,
+              estoqueMinimo: prod?.minStock || 0,
+              estoqueAtual: prod?.stock || 0
+            };
+          }
+          if (m.type === 'Entrada') {
+            productTotals[key].entradas += m.quantity;
+            productTotals[key].valorEntrada += m.value;
+          } else {
+            productTotals[key].saidas += m.quantity;
+            productTotals[key].valorSaida += m.value;
+          }
+        });
+
+        finalData = Object.entries(productTotals).map(([produto, t]) => ({
+          'Código': t.codigo,
+          'Produto': produto,
+          'Categoria': t.categoria,
+          'Total Entradas': t.entradas,
+          'Total Saídas': t.saidas,
+          'Saldo Movimentação': t.entradas - t.saidas,
+          'R$ Entrada': `R$ ${t.valorEntrada.toFixed(2)}`,
+          'R$ Saída': `R$ ${t.valorSaida.toFixed(2)}`,
+          'Estoque Mínimo': t.estoqueMinimo,
+          'Estoque Atual': t.estoqueAtual
+        }));
+      } else if (requestLower.includes('estoque') && requestLower.includes('baixo')) {
+        finalData = enrichedProducts
+          .filter(p => p.stock < p.minStock)
+          .map(p => ({
+            'Código': p.cod,
+            'Produto': p.description,
+            'Categoria': p.category,
+            'Estoque Atual': p.stock,
+            'Estoque Mínimo': p.minStock,
+            'Falta': p.minStock - p.stock
+          }));
+      } else if (requestLower.includes('mês') || requestLower.includes('mensal')) {
+        const monthlyTotals: Record<string, { entradas: number; saidas: number; valor: number }> = {};
+        enrichedMovements.forEach(m => {
+          const month = m.date?.substring(0, 7) || 'Sem Data';
+          if (!monthlyTotals[month]) {
+            monthlyTotals[month] = { entradas: 0, saidas: 0, valor: 0 };
+          }
+          if (m.type === 'Entrada') {
+            monthlyTotals[month].entradas += m.quantity;
+          } else {
+            monthlyTotals[month].saidas += m.quantity;
+          }
+          monthlyTotals[month].valor += m.value;
+        });
+        finalData = Object.entries(monthlyTotals)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([mes, t]) => ({
+            'Mês': mes,
+            'Total Entradas': t.entradas,
+            'Total Saídas': t.saidas,
+            'Valor Total': `R$ ${t.valor.toFixed(2)}`
+          }));
+      } else {
+        // Default: movements by product
+        const productTotals: Record<string, any> = {};
+        enrichedMovements.forEach(m => {
+          const key = m.productName || m.productCode;
+          if (!productTotals[key]) {
+            const prod = enrichedProducts.find(p => p.description === m.productName);
+            productTotals[key] = {
+              codigo: m.productCode,
+              categoria: m.productCategory,
+              entradas: 0,
+              saidas: 0,
+              valorEntrada: 0,
+              valorSaida: 0,
+              estoqueMinimo: prod?.minStock || 0,
+              estoqueAtual: prod?.stock || 0
+            };
+          }
+          if (m.type === 'Entrada') {
+            productTotals[key].entradas += m.quantity;
+            productTotals[key].valorEntrada += m.value;
+          } else {
+            productTotals[key].saidas += m.quantity;
+            productTotals[key].valorSaida += m.value;
+          }
+        });
+        finalData = Object.entries(productTotals).map(([produto, t]) => ({
+          'Código': t.codigo,
+          'Produto': produto,
+          'Categoria': t.categoria,
+          'Total Entradas': t.entradas,
+          'Total Saídas': t.saidas,
+          'Saldo': t.entradas - t.saidas,
+          'R$ Entrada': `R$ ${t.valorEntrada.toFixed(2)}`,
+          'R$ Saída': `R$ ${t.valorSaida.toFixed(2)}`,
+          'Estoque Mínimo': t.estoqueMinimo,
+          'Estoque Atual': t.estoqueAtual
+        }));
+      }
+
+      // Generate Excel file
+      const fileName = aiConfig.fileName || `Relatorio_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const sheetName = aiConfig.sheetName || 'Dados';
+
+      const ws = XLSX.utils.json_to_sheet(finalData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      XLSX.writeFile(wb, fileName);
+      setAiExportPrompt('');
 
     } catch (error: any) {
       console.error('Erro na exportação com IA:', error);
