@@ -25,6 +25,7 @@ import Purchases from './components/Purchases.tsx';
 import Settings from './components/Settings.tsx';
 import PartnerRegistration from './components/PartnerRegistration.tsx';
 import AuraBackground from './components/ui/AuraBackground.tsx';
+import CompanySuspendedModal from './components/CompanySuspendedModal.tsx';
 import { SystemModule } from './services/db.ts';
 
 const FeatureGate = ({ module, companyId, children, fallback = null }: { module: SystemModule; companyId: string; children: React.ReactNode; fallback?: React.ReactNode }) => {
@@ -724,6 +725,20 @@ const App = () => {
             </div>
           </main>
         </div>
+      )}
+
+      {/* Modal de empresa suspensa */}
+      {showSuspendedModal && company && (
+        <CompanySuspendedModal
+          companyName={company.name}
+          suspensionReason={company.suspensionReason}
+          onLogout={() => {
+            db.logout();
+            setUser(null);
+            setCompany(null);
+            setShowSuspendedModal(false);
+          }}
+        />
       )}
     </Router>
   );
