@@ -246,7 +246,7 @@ export interface AuditLog {
   id: string;
   entity: string;
   entityId: string;
-  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'IMPORT';
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'IMPORT' | 'EXPORT';
   beforeJson?: string;
   afterJson?: string;
   userId: string;

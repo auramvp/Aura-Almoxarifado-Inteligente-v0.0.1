@@ -1062,7 +1062,7 @@ export const db = {
       return [];
     }
     return data || [];
-  }
+  },
   async addExportLog(userId: string, type: string, count: number, details: string): Promise<void> {
     const payload = {
       entity: 'export',
