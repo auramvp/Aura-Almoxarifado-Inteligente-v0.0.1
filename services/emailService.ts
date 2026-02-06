@@ -441,7 +441,7 @@ export const EmailService = {
   async sendPartnerInvitation(email: string, cnpj: string, name: string) {
     const subject = `🤝 Convite Especial Aura - Parceiro de Almoxarifado`;
     const accentColor = '#6366f1'; // Indigo
-    const registrationLink = `${getBaseUrl()}/registro-parceiro?email=${encodeURIComponent(email)}&cnpj=${encodeURIComponent(cnpj)}&name=${encodeURIComponent(name)}`;
+    const registrationLink = `${getBaseUrl()}/#/registro-parceiro?email=${encodeURIComponent(email)}&cnpj=${encodeURIComponent(cnpj)}&name=${encodeURIComponent(name)}`;
 
     const content = `
       <p style="margin-top: 0; font-size: 16px; line-height: 1.6; color: #374151;">

@@ -255,17 +255,30 @@ export const db = {
     if (authError) throw authError;
     if (!authData.user) throw new Error("Erro ao criar usuário de autenticação.");
 
-    // 2. Create Company
-    const { data: company, error: compErr } = await supabase.from('companies').insert({
-      cnpj: companyData.cnpj,
-      name: companyData.name,
-      status: 'active',
-      sector_name: 'Geral',
-      sector_responsible: userData.name,
-      email: userData.email
-    }).select().single();
+    // 2. Check if Company already exists or Create Company
+    let company;
 
-    if (compErr) throw compErr;
+    const { data: existingCompany } = await supabase
+      .from('companies')
+      .select('*')
+      .eq('cnpj', companyData.cnpj)
+      .maybeSingle();
+
+    if (existingCompany) {
+      company = existingCompany;
+    } else {
+      const { data: newCompany, error: compErr } = await supabase.from('companies').insert({
+        cnpj: companyData.cnpj,
+        name: companyData.name,
+        status: 'active',
+        sector_name: 'Geral',
+        sector_responsible: userData.name,
+        email: userData.email
+      }).select().single();
+
+      if (compErr) throw compErr;
+      company = newCompany;
+    }
 
     // 3. Create Profile
     const { data: user, error: userErr } = await supabase.from('profiles').insert({
