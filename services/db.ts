@@ -296,12 +296,35 @@ export const db = {
     const { data: plan } = await supabase.from('plans').select('id').eq('name', 'Partners').single();
 
     if (plan) {
-      await supabase.from('subscriptions').insert({
-        company_id: company.id,
-        plan_id: plan.id,
-        status: 'active',
-        start_date: new Date().toISOString().split('T')[0]
-      });
+      // Check for existing active subscription
+      const { data: existingSub } = await supabase
+        .from('subscriptions')
+        .select('id')
+        .eq('company_id', company.id)
+        .in('status', ['active', 'trialing', 'trial'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingSub) {
+        // Update existing to Partners
+        await supabase
+          .from('subscriptions')
+          .update({
+            plan_id: plan.id,
+            status: 'active',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingSub.id);
+      } else {
+        // Create new
+        await supabase.from('subscriptions').insert({
+          company_id: company.id,
+          plan_id: plan.id,
+          status: 'active',
+          start_date: new Date().toISOString().split('T')[0]
+        });
+      }
     }
 
     // 5. Send Magic Link for immediate login
