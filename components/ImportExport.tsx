@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { db } from '../services/db';
+import { supabase } from '../services/supabaseClient';
 import {
   FileUp, CheckCircle2, AlertCircle, Sparkles,
   Loader2, Table, ListChecks, ArrowRight,
@@ -949,33 +950,40 @@ const ImportExport = ({ user }: any) => {
   // === EXPORT FUNCTIONALITY ===
   const [exportType, setExportType] = useState<'products' | 'suppliers' | 'movements' | 'stock'>('products');
   const [isExporting, setIsExporting] = useState(false);
+  const [aiExportPrompt, setAiExportPrompt] = useState('');
+  const [isAiExporting, setIsAiExporting] = useState(false);
+  const [aiExportError, setAiExportError] = useState('');
 
   const handleExport = async () => {
     setIsExporting(true);
     try {
       let data: any[] = [];
       let fileName = '';
-      let headers: string[] = [];
+
+      // Load all data for lookups
+      const allProducts = await db.getProducts();
+      const allCategories = await db.getCategories();
+      const allSuppliers = await db.getSuppliers();
+
+      // Create lookup maps
+      const productMap = new Map(allProducts.map(p => [p.id, p]));
+      const categoryMap = new Map(allCategories.map(c => [c.id, c.name]));
 
       switch (exportType) {
         case 'products':
-          const products = await db.getProducts();
-          headers = ['Código', 'Descrição', 'Unidade', 'Estoque Mínimo', 'Localização', 'Categoria'];
-          data = products.map(p => ({
+          data = allProducts.map(p => ({
             'Código': p.cod,
             'Descrição': p.description,
             'Unidade': p.unit,
             'Estoque Mínimo': p.minStock,
             'Localização': p.storageLocation || '',
-            'Categoria': p.categoryId || ''
+            'Categoria': p.categoryId ? categoryMap.get(p.categoryId) || '' : ''
           }));
           fileName = `Produtos_${new Date().toISOString().split('T')[0]}.xlsx`;
           break;
 
         case 'suppliers':
-          const suppliers = await db.getSuppliers();
-          headers = ['Nome', 'CNPJ', 'Telefone', 'Email', 'Endereço'];
-          data = suppliers.map(s => ({
+          data = allSuppliers.map(s => ({
             'Nome': s.name,
             'CNPJ': s.cnpj || '',
             'Telefone': s.phone,
@@ -987,36 +995,36 @@ const ImportExport = ({ user }: any) => {
 
         case 'movements':
           const movements = await db.getMovements();
-          headers = ['Data', 'Produto', 'Tipo', 'Quantidade', 'Valor Total', 'NF', 'Destino'];
-          data = movements.map(m => ({
-            'Data': new Date(m.movementDate).toLocaleDateString('pt-BR'),
-            'Produto': m.productId,
-            'Tipo': m.type === MovementType.IN ? 'Entrada' : 'Saída',
-            'Quantidade': m.quantity,
-            'Valor Total': m.totalValue,
-            'NF': m.invoiceNumber || '',
-            'Destino': m.destination || ''
-          }));
+          data = movements.map(m => {
+            const product = productMap.get(m.productId);
+            return {
+              'Data': new Date(m.movementDate).toLocaleDateString('pt-BR'),
+              'Produto': product ? `${product.cod} - ${product.description}` : m.productId,
+              'Tipo': m.type === MovementType.IN ? 'Entrada' : 'Saída',
+              'Quantidade': m.quantity,
+              'Valor Total': m.totalValue,
+              'NF': m.invoiceNumber || '',
+              'Destino': m.destination || ''
+            };
+          });
           fileName = `Movimentacoes_${new Date().toISOString().split('T')[0]}.xlsx`;
           break;
 
         case 'stock':
-          const allProducts = await db.getProducts();
-          const allMovements = await db.getMovements();
-          // Calculate stock for each product
+          const stockMovements = await db.getMovements();
           const stockMap: Record<string, number> = {};
           allProducts.forEach(p => { stockMap[p.id] = 0; });
-          allMovements.forEach(m => {
+          stockMovements.forEach(m => {
             if (m.type === MovementType.IN) {
               stockMap[m.productId] = (stockMap[m.productId] || 0) + m.quantity;
             } else {
               stockMap[m.productId] = (stockMap[m.productId] || 0) - m.quantity;
             }
           });
-          headers = ['Código', 'Descrição', 'Saldo Atual', 'Estoque Mínimo', 'Status'];
           data = allProducts.map(p => ({
             'Código': p.cod,
             'Descrição': p.description,
+            'Categoria': p.categoryId ? categoryMap.get(p.categoryId) || '' : '',
             'Saldo Atual': stockMap[p.id] || 0,
             'Estoque Mínimo': p.minStock,
             'Status': (stockMap[p.id] || 0) < p.minStock ? 'BAIXO' : 'OK'
@@ -1025,13 +1033,11 @@ const ImportExport = ({ user }: any) => {
           break;
       }
 
-      // Create workbook and sheet
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Dados');
       XLSX.writeFile(wb, fileName);
 
-      // Log export
       await db.addAuditLog({
         entity: 'EXPORT',
         entityId: exportType,
@@ -1045,6 +1051,125 @@ const ImportExport = ({ user }: any) => {
       alert('Erro ao exportar dados: ' + error.message);
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  // AI-powered custom export
+  const handleAiExport = async () => {
+    if (!aiExportPrompt.trim()) return;
+
+    setIsAiExporting(true);
+    setAiExportError('');
+
+    try {
+      // Load all data
+      const allProducts = await db.getProducts();
+      const allCategories = await db.getCategories();
+      const allSuppliers = await db.getSuppliers();
+      const allMovements = await db.getMovements();
+
+      // Create lookup maps
+      const productMap = new Map(allProducts.map(p => [p.id, p]));
+      const categoryMap = new Map(allCategories.map(c => [c.id, c.name]));
+
+      // Calculate stock for each product
+      const stockMap: Record<string, number> = {};
+      allProducts.forEach(p => { stockMap[p.id] = 0; });
+      allMovements.forEach(m => {
+        if (m.type === MovementType.IN) {
+          stockMap[m.productId] = (stockMap[m.productId] || 0) + m.quantity;
+        } else {
+          stockMap[m.productId] = (stockMap[m.productId] || 0) - m.quantity;
+        }
+      });
+
+      // Prepare data summary for AI
+      const dataSummary = {
+        produtos: allProducts.slice(0, 5).map(p => ({
+          codigo: p.cod,
+          descricao: p.description,
+          categoria: categoryMap.get(p.categoryId || '') || '',
+          unidade: p.unit,
+          estoqueMinimo: p.minStock,
+          saldoAtual: stockMap[p.id] || 0
+        })),
+        fornecedores: allSuppliers.slice(0, 3).map(s => ({ nome: s.name, cnpj: s.cnpj })),
+        movimentacoes: allMovements.slice(0, 5).map(m => {
+          const prod = productMap.get(m.productId);
+          return {
+            data: m.movementDate,
+            produto: prod?.description || '',
+            tipo: m.type,
+            quantidade: m.quantity,
+            valor: m.totalValue
+          };
+        }),
+        totalProdutos: allProducts.length,
+        totalFornecedores: allSuppliers.length,
+        totalMovimentacoes: allMovements.length
+      };
+
+      const prompt = `Você é um assistente de exportação de dados. O usuário quer gerar uma planilha personalizada.
+
+DADOS DISPONÍVEIS (amostra):
+${JSON.stringify(dataSummary, null, 2)}
+
+PEDIDO DO USUÁRIO: "${aiExportPrompt}"
+
+Gere um JSON com a estrutura da planilha solicitada. Responda APENAS com JSON válido no formato:
+{
+  "fileName": "nome_do_arquivo.xlsx",
+  "sheetName": "Nome da Aba",
+  "columns": ["Coluna1", "Coluna2", ...],
+  "dataQuery": "tipo de query: 'movimentos_por_produto' | 'estoque_baixo' | 'movimentos_por_mes' | 'produtos_sem_movimento' | 'resumo_geral' | 'custom'"
+}`;
+
+      const { data: result, error: invokeError } = await supabase.functions.invoke('ai-export', {
+        body: {
+          products: allProducts.map(p => ({
+            id: p.id,
+            cod: p.cod,
+            description: p.description,
+            category: categoryMap.get(p.categoryId || '') || '',
+            minStock: p.minStock,
+            stock: stockMap[p.id] || 0
+          })),
+          suppliers: allSuppliers.map(s => ({ name: s.name, cnpj: s.cnpj })),
+          movements: allMovements.map(m => {
+            const prod = productMap.get(m.productId);
+            return {
+              date: m.movementDate,
+              productCode: prod?.cod || '',
+              productName: prod?.description || '',
+              type: m.type === MovementType.IN ? 'Entrada' : 'Saída',
+              quantity: m.quantity,
+              value: m.totalValue,
+              destination: m.destination
+            };
+          }),
+          userRequest: aiExportPrompt
+        }
+      });
+
+      if (invokeError) {
+        throw new Error(invokeError.message || 'Erro na comunicação com a IA');
+      }
+
+      if (result.data && result.fileName) {
+        const ws = XLSX.utils.json_to_sheet(result.data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, result.sheetName || 'Dados');
+        XLSX.writeFile(wb, result.fileName);
+        setAiExportPrompt('');
+      } else {
+        throw new Error('Resposta inválida da IA');
+      }
+
+    } catch (error: any) {
+      console.error('Erro na exportação com IA:', error);
+      setAiExportError(error.message || 'Erro ao processar sua solicitação');
+    } finally {
+      setIsAiExporting(false);
     }
   };
 
@@ -1502,6 +1627,51 @@ const ImportExport = ({ user }: any) => {
             {isExporting ? <Loader2 className="animate-spin" size={20} /> : <Download size={20} />}
             {isExporting ? 'Exportando...' : 'Exportar Planilha'}
           </button>
+
+          {/* AI Export Chat */}
+          <div className="mt-8 pt-8 border-t border-slate-200 dark:border-slate-700">
+            <h4 className="text-lg font-bold flex items-center gap-2 mb-4">
+              <Sparkles className="text-purple-500" /> Exportação Inteligente
+            </h4>
+            <p className="text-slate-500 text-sm mb-4">
+              Descreva o relatório que você precisa e a IA vai gerar a planilha para você.
+            </p>
+
+            <div className="space-y-3">
+              <textarea
+                value={aiExportPrompt}
+                onChange={(e) => setAiExportPrompt(e.target.value)}
+                placeholder="Ex: Quero uma planilha com o total de movimentações por produto, mostrando entradas, saídas e saldo final..."
+                className="w-full p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 resize-none h-24 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                disabled={isAiExporting}
+              />
+
+              {aiExportError && (
+                <div className="text-red-500 text-sm flex items-center gap-2">
+                  <AlertCircle size={16} /> {aiExportError}
+                </div>
+              )}
+
+              <button
+                onClick={handleAiExport}
+                disabled={isAiExporting || !aiExportPrompt.trim()}
+                className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition disabled:opacity-50"
+              >
+                {isAiExporting ? <Loader2 className="animate-spin" size={20} /> : <Sparkles size={20} />}
+                {isAiExporting ? 'Gerando relatório...' : 'Gerar com IA'}
+              </button>
+
+              <div className="text-xs text-slate-400 mt-2">
+                <p className="font-medium mb-1">Exemplos de pedidos:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Total de movimentações por produto</li>
+                  <li>Produtos com estoque abaixo do mínimo</li>
+                  <li>Resumo de entradas e saídas por mês</li>
+                  <li>Produtos sem movimentação nos últimos 30 dias</li>
+                </ul>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
