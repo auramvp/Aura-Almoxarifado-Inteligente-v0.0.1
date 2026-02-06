@@ -1063,4 +1063,34 @@ export const db = {
     }
     return data || [];
   }
+  async addExportLog(userId: string, type: string, count: number, details: string): Promise<void> {
+    const payload = {
+      entity: 'export',
+      entity_id: type, // Using type as entity_id (e.g., 'products', 'movements')
+      action: 'EXPORT',
+      user_id: userId,
+      after_json: { type, count, details },
+      created_at: new Date().toISOString()
+    };
+    await supabase.from('audit_logs').insert(payload);
+  },
+
+  async getExportHistory(): Promise<AuditLog[]> {
+    const { data } = await supabase
+      .from('audit_logs')
+      .select('*')
+      .eq('action', 'EXPORT')
+      .order('created_at', { ascending: false });
+
+    return (data || []).map(l => ({
+      id: l.id,
+      entity: l.entity,
+      entityId: l.entity_id,
+      action: l.action,
+      beforeJson: l.before_json,
+      afterJson: l.after_json,
+      userId: l.user_id,
+      createdAt: l.created_at
+    })) as AuditLog[];
+  }
 };
