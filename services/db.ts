@@ -325,6 +325,9 @@ export const db = {
           start_date: new Date().toISOString().split('T')[0]
         });
       }
+
+      // FORCE UPDATE COMPANY PLAN_ID to ensure it shows up immediately
+      await supabase.from('companies').update({ plan_id: plan.id }).eq('id', company.id);
     }
 
     // 5. Send Magic Link for immediate login
