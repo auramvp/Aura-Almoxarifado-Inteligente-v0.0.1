@@ -171,11 +171,17 @@ export interface Sector {
   createdAt: string;
 }
 
+export enum ProductType {
+  CONSUMABLE = 'CONSUMABLE',
+  RETURNABLE = 'RETURNABLE'
+}
+
 export interface Product {
   id: string;
   companyId: string;
   cod: string;
   description: string;
+  type: ProductType;
   unit: string;
   minStock: number;
   categoryId?: string;

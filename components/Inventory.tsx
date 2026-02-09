@@ -2,11 +2,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../services/db';
 import { Search, Filter, AlertTriangle } from 'lucide-react';
-import { Product, Location, StockBalance } from '../types';
+import { Product, Location, StockBalance, ProductType } from '../types';
 
 const Inventory = ({ user }: any) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLocation, setSelectedLocation] = useState('all');
+  const [selectedType, setSelectedType] = useState<'all' | ProductType>('all');
 
   // Fix: db methods return promises, so we use state and useEffect
   const [products, setProducts] = useState<Product[]>([]);
@@ -42,9 +43,12 @@ const Inventory = ({ user }: any) => {
     });
   }, [products, balances, selectedLocation]);
 
-  const filteredData = tableData.filter(item => 
-    (item.description.toLowerCase().includes(searchTerm.toLowerCase()) || item.cod.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredData = tableData.filter(item => {
+    const matchesSearch = item.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.cod.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesType = selectedType === 'all' || item.type === selectedType;
+    return matchesSearch && matchesType;
+  });
 
   return (
     <div className="h-full flex flex-col gap-6 overflow-hidden">
@@ -56,26 +60,49 @@ const Inventory = ({ user }: any) => {
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row items-center gap-4 transition-colors shrink-0">
         <div className="relative flex-1 w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input 
-            type="text" 
+          <input
+            type="text"
             placeholder="Filtrar por nome ou código..."
             className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition outline-none"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <Filter size={18} className="text-slate-400" />
-          <select 
-            className="w-full md:w-48 px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition outline-none"
-            value={selectedLocation}
-            onChange={(e) => setSelectedLocation(e.target.value)}
-          >
-            <option value="all">Todos os Locais</option>
-            {locations.map(l => (
-              <option key={l.id} value={l.id}>{l.name}</option>
-            ))}
-          </select>
+        <div className="flex items-center gap-4 w-full md:w-auto">
+          <div className="flex items-center gap-2">
+            <Filter size={18} className="text-slate-400" />
+            <select
+              className="w-full md:w-48 px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition outline-none text-sm"
+              value={selectedLocation}
+              onChange={(e) => setSelectedLocation(e.target.value)}
+            >
+              <option value="all">Todos os Locais</option>
+              {locations.map(l => (
+                <option key={l.id} value={l.id}>{l.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
+            <button
+              onClick={() => setSelectedType('all')}
+              className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-md transition ${selectedType === 'all' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
+            >
+              Todos
+            </button>
+            <button
+              onClick={() => setSelectedType(ProductType.CONSUMABLE)}
+              className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-md transition ${selectedType === ProductType.CONSUMABLE ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
+            >
+              Consumíveis
+            </button>
+            <button
+              onClick={() => setSelectedType(ProductType.RETURNABLE)}
+              className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-md transition ${selectedType === ProductType.RETURNABLE ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
+            >
+              Retornáveis
+            </button>
+          </div>
         </div>
       </div>
 

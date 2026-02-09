@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../services/db';
-import { MovementType, StockMovement, Category, Product, Supplier, Sector } from '../types';
+import { MovementType, StockMovement, Category, Product, Supplier, Sector, ProductType } from '../types';
 import {
   ArrowUpCircle, ArrowDownCircle, Filter, X, Search, Tag,
   Package, Truck, FilterX, Hash, Navigation, DollarSign,
@@ -28,6 +28,7 @@ const Movements = ({ user }: any) => {
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterSector, setFilterSector] = useState('all');
   const [filterType, setFilterType] = useState<'all' | MovementType>('all');
+  const [filterProductType, setFilterProductType] = useState<'all' | ProductType>('all');
   const [isSaving, setIsSaving] = useState(false);
 
   // New states for product search
@@ -219,9 +220,11 @@ const Movements = ({ user }: any) => {
       const matchesCategory = filterCategory === 'all' || prod?.categoryId === filterCategory;
       const matchesSector = filterSector === 'all' || m.sectorId === filterSector;
       const matchesType = filterType === 'all' || m.type === filterType;
-      return matchesSearch && matchesCategory && matchesSector && matchesType;
+      const matchesProductType = filterProductType === 'all' || prod?.type === filterProductType;
+
+      return matchesSearch && matchesCategory && matchesSector && matchesType && matchesProductType;
     });
-  }, [movements, products, searchTerm, filterCategory, filterSector, filterType]);
+  }, [movements, products, searchTerm, filterCategory, filterSector, filterType, filterProductType]);
 
   const invoiceMovements = useMemo(() => {
     return movements.filter(m => m.type === MovementType.IN && (m.invoiceNumber || m.invoiceUrl));
@@ -417,7 +420,12 @@ const Movements = ({ user }: any) => {
                 <option value="all">Todos os Setores</option>
                 {sectors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
-              <button onClick={() => { setSearchTerm(''); setFilterCategory('all'); setFilterSector('all'); setFilterType('all'); }} className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition text-sm font-medium"><FilterX size={14} /> Limpar</button>
+              <select className="px-3 py-2 bg-white dark:bg-slate-900/50 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg text-sm outline-none font-bold" value={filterProductType} onChange={e => setFilterProductType(e.target.value as any)}>
+                <option value="all">Tipos (Todos)</option>
+                <option value={ProductType.CONSUMABLE}>Consumíveis</option>
+                <option value={ProductType.RETURNABLE}>Retornáveis</option>
+              </select>
+              <button onClick={() => { setSearchTerm(''); setFilterCategory('all'); setFilterSector('all'); setFilterType('all'); setFilterProductType('all'); }} className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition text-sm font-medium"><FilterX size={14} /> Limpar</button>
             </div>
           </div>
           <div className="overflow-x-auto">

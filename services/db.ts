@@ -772,7 +772,7 @@ export const db = {
     const { data, error } = await supabase.from('products').select('*').eq('active', true).eq('company_id', user.companyId);
     if (error) return [];
     return (data || []).map(p => ({
-      id: p.id, companyId: p.company_id, cod: p.cod, description: p.description, unit: p.unit, minStock: p.min_stock, categoryId: p.category_id, defaultSupplierId: p.default_supplier_id, storageLocation: p.storage_location, observations: p.observations, pmed: Number(p.pmed || 0), active: p.active, createdAt: p.created_at, updatedAt: p.updated_at
+      id: p.id, companyId: p.company_id, cod: p.cod, description: p.description, type: p.type, unit: p.unit, minStock: p.min_stock, category_id: p.category_id, categoryId: p.category_id, defaultSupplierId: p.default_supplier_id, storageLocation: p.storage_location, observations: p.observations, pmed: Number(p.pmed || 0), active: p.active, createdAt: p.created_at, updatedAt: p.updated_at
     })) as Product[];
   },
 
@@ -789,7 +789,7 @@ export const db = {
     }
 
     const payload = {
-      cod: normalize(p.cod), description: p.description, unit: normalize(p.unit),
+      cod: normalize(p.cod), description: p.description, type: p.type || 'CONSUMABLE', unit: normalize(p.unit),
       min_stock: p.min_stock, category_id: p.categoryId || null,
       default_supplier_id: p.defaultSupplierId || null,
       storage_location: normalize(p.storageLocation), observations: p.observations,
@@ -807,6 +807,7 @@ export const db = {
     const payload: any = {};
     if (updates.cod !== undefined) payload.cod = normalize(updates.cod);
     if (updates.description !== undefined) payload.description = updates.description;
+    if (updates.type !== undefined) payload.type = updates.type;
     if (updates.unit !== undefined) payload.unit = normalize(updates.unit);
     if (updates.minStock !== undefined) payload.min_stock = updates.minStock;
     if (updates.categoryId !== undefined) payload.category_id = updates.categoryId || null;

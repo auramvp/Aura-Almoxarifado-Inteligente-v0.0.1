@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
-import { Product, UserRole, Category, Supplier, StockBalance } from '../types';
+import { Product, UserRole, Category, Supplier, StockBalance, ProductType } from '../types';
 import { Search, Plus, Edit, Trash2, X, Save, Tags, Palette, Smile, RotateCcw, Box, Hash, Tag, Truck, DollarSign, Warehouse, Ruler, AlertTriangle, Filter, FilterX, FileText, Eye } from 'lucide-react';
 import ManageCategoriesModal from './ManageCategoriesModal';
 
@@ -24,6 +24,8 @@ const Products = ({ user }: any) => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [viewingProduct, setViewingProduct] = useState<Product | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [isTypeSelectionModalOpen, setIsTypeSelectionModalOpen] = useState(false);
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState<'all' | ProductType>('all');
 
   // Form states Product
   const [formData, setFormData] = useState({
@@ -35,7 +37,8 @@ const Products = ({ user }: any) => {
     defaultSupplierId: '',
     storageLocation: '',
     observations: '',
-    pmed: 0
+    pmed: 0,
+    type: ProductType.CONSUMABLE
   });
 
   // Display value for currency mask
@@ -106,9 +109,11 @@ const Products = ({ user }: any) => {
         defaultSupplierId: p.defaultSupplierId || '',
         storageLocation: p.storageLocation || '',
         observations: p.observations || '',
-        pmed: p.pmed
+        pmed: p.pmed,
+        type: p.type || ProductType.CONSUMABLE
       });
       setDisplayPmed(formatBRL(p.pmed));
+      setIsModalOpen(true);
     } else {
       setEditingProduct(null);
       setFormData({
@@ -120,10 +125,17 @@ const Products = ({ user }: any) => {
         defaultSupplierId: '',
         storageLocation: '',
         observations: '',
-        pmed: 0
+        pmed: 0,
+        type: ProductType.CONSUMABLE
       });
       setDisplayPmed(formatBRL(0));
+      setIsTypeSelectionModalOpen(true);
     }
+  };
+
+  const handleSelectType = (type: ProductType) => {
+    setFormData(prev => ({ ...prev, type }));
+    setIsTypeSelectionModalOpen(false);
     setIsModalOpen(true);
   };
 
@@ -168,8 +180,8 @@ const Products = ({ user }: any) => {
     const matchesCategory = selectedCategory === 'all' || p.categoryId === selectedCategory;
     const matchesSupplier = selectedSupplier === 'all' || p.defaultSupplierId === selectedSupplier;
     const matchesLocation = selectedLocation === 'all' || p.storageLocation === selectedLocation;
-
-    return matchesSearch && matchesCategory && matchesSupplier && matchesLocation;
+    const matchesType = selectedTypeFilter === 'all' || p.type === selectedTypeFilter;
+    return matchesSearch && matchesCategory && matchesSupplier && matchesLocation && matchesType;
   });
 
   return (
@@ -192,26 +204,48 @@ const Products = ({ user }: any) => {
             </div>
           )}
         </div>
-        <div className="flex gap-2">
-          {canEdit && (
-            <>
-              <button
-                onClick={() => setIsCategoryModalOpen(true)}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition font-medium border border-slate-200 dark:border-slate-700 shadow-sm"
-              >
-                <Tags size={18} />
-                Categorias
-              </button>
-              <button
-                onClick={() => handleOpenModal()}
-                disabled={subscription?.plan && counts.products >= subscription.plan.maxItems}
-                className={`flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium shadow-md shadow-blue-100 ${(subscription?.plan && counts.products >= subscription.plan.maxItems) ? 'opacity-50 cursor-not-allowed grayscale' : ''}`}
-              >
-                <Plus size={20} />
-                Novo Produto
-              </button>
-            </>
-          )}
+        <div className="flex flex-col items-end gap-3">
+          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
+            <button
+              onClick={() => setSelectedTypeFilter('all')}
+              className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md transition ${selectedTypeFilter === 'all' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
+            >
+              Todos
+            </button>
+            <button
+              onClick={() => setSelectedTypeFilter(ProductType.CONSUMABLE)}
+              className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md transition ${selectedTypeFilter === ProductType.CONSUMABLE ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
+            >
+              Consumíveis
+            </button>
+            <button
+              onClick={() => setSelectedTypeFilter(ProductType.RETURNABLE)}
+              className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md transition ${selectedTypeFilter === ProductType.RETURNABLE ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
+            >
+              Retornáveis
+            </button>
+          </div>
+          <div className="flex gap-2">
+            {canEdit && (
+              <>
+                <button
+                  onClick={() => setIsCategoryModalOpen(true)}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition font-medium border border-slate-200 dark:border-slate-700 shadow-sm"
+                >
+                  <Tags size={18} />
+                  Categorias
+                </button>
+                <button
+                  onClick={() => handleOpenModal()}
+                  disabled={subscription?.plan && counts.products >= subscription.plan.maxItems}
+                  className={`flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium shadow-md shadow-blue-100 ${(subscription?.plan && counts.products >= subscription.plan.maxItems) ? 'opacity-50 cursor-not-allowed grayscale' : ''}`}
+                >
+                  <Plus size={20} />
+                  Novo Produto
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -323,6 +357,16 @@ const Products = ({ user }: any) => {
                           </span>
                         )}
                         <p className={`font-medium ${isBelowMin ? 'text-red-700 dark:text-red-400' : ''}`}>{p.description}</p>
+                        {p.type === ProductType.RETURNABLE ? (
+                          <span className="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 text-[10px] font-black uppercase rounded tracking-wider flex items-center gap-1" title="Item Retornável">
+                            <RotateCcw size={10} />
+                            RET
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-[10px] font-black uppercase rounded tracking-wider" title="Item Consumível">
+                            CON
+                          </span>
+                        )}
                       </div>
                       {p.observations && (
                         <p className="text-[10px] text-slate-400 dark:text-slate-500 italic line-clamp-1 max-w-[200px]" title={p.observations}>
@@ -394,6 +438,55 @@ const Products = ({ user }: any) => {
         onClose={() => setIsCategoryModalOpen(false)}
         onCategoryChange={() => refreshData()}
       />
+
+      {isTypeSelectionModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200 border dark:border-slate-800">
+            <div className="p-8 text-center">
+              <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner">
+                <Box size={40} />
+              </div>
+              <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">Novo Produto</h3>
+              <p className="text-slate-500 dark:text-slate-400 mb-8">Escolha o tipo de item que deseja cadastrar:</p>
+
+              <div className="grid grid-cols-1 gap-4">
+                <button
+                  onClick={() => handleSelectType(ProductType.CONSUMABLE)}
+                  className="flex items-center gap-4 p-5 bg-slate-50 dark:bg-slate-800/50 hover:bg-blue-50 dark:hover:bg-blue-900/20 border-2 border-slate-100 dark:border-slate-700 hover:border-blue-200 dark:hover:border-blue-800 rounded-xl transition group text-left outline-none"
+                >
+                  <div className="w-12 h-12 bg-white dark:bg-slate-700 rounded-lg flex items-center justify-center shadow-sm text-blue-600 dark:text-blue-400 shrink-0 group-hover:scale-110 transition">
+                    <Box size={24} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-bold text-slate-800 dark:text-slate-100 group-hover:text-blue-700 dark:group-hover:text-blue-300 transition">Item Consumível</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Itens que entram e acabam (ex: embalagens, insumos).</p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => handleSelectType(ProductType.RETURNABLE)}
+                  className="flex items-center gap-4 p-5 bg-slate-50 dark:bg-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 border-2 border-slate-100 dark:border-slate-700 hover:border-indigo-200 dark:hover:border-indigo-800 rounded-xl transition group text-left outline-none"
+                >
+                  <div className="w-12 h-12 bg-white dark:bg-slate-700 rounded-lg flex items-center justify-center shadow-sm text-indigo-600 dark:text-indigo-400 shrink-0 group-hover:scale-110 transition">
+                    <RotateCcw size={24} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-bold text-slate-800 dark:text-slate-100 group-hover:text-indigo-700 dark:group-hover:text-indigo-300 transition">Item Retornável</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Itens que são retirados e devolvidos (ex: ferramentas, EPIs).</p>
+                  </div>
+                </button>
+              </div>
+
+              <button
+                onClick={() => setIsTypeSelectionModalOpen(false)}
+                className="mt-8 text-sm font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition uppercase tracking-widest outline-none"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm overflow-y-auto">
