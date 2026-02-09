@@ -122,36 +122,6 @@ export const AiReports = () => {
     if (!reportRef.current) return;
     setIsPdfGenerating(true);
 
-    // Scroll to top to ensure html2canvas captures correctly
-    window.scrollTo(0, 0);
-
-    // Create a temporary container that takes over the screen
-    const container = document.createElement('div');
-    container.style.position = 'fixed';
-    container.style.top = '0';
-    container.style.left = '0';
-    container.style.width = '100vw';
-    container.style.height = '100vh';
-    container.style.backgroundColor = '#ffffff';
-    container.style.zIndex = '999999'; // Highest priority
-    container.style.overflow = 'auto'; // Allow scrolling if needed (though we want to capture it all)
-    container.style.padding = '0';
-    container.style.margin = '0';
-
-    // Create a visual indicator that something is happening
-    const loadingIndicator = document.createElement('div');
-    loadingIndicator.innerText = 'Gerando PDF... Por favor aguarde.';
-    loadingIndicator.style.position = 'fixed';
-    loadingIndicator.style.top = '20px';
-    loadingIndicator.style.left = '50%';
-    loadingIndicator.style.transform = 'translateX(-50%)';
-    loadingIndicator.style.backgroundColor = 'rgba(0,0,0,0.8)';
-    loadingIndicator.style.color = 'white';
-    loadingIndicator.style.padding = '10px 20px';
-    loadingIndicator.style.borderRadius = '5px';
-    loadingIndicator.style.zIndex = '1000000';
-    document.body.appendChild(loadingIndicator);
-
     try {
       const doc = new jsPDF({
         unit: 'pt',
@@ -159,73 +129,60 @@ export const AiReports = () => {
         orientation: 'portrait'
       });
 
-      // Create a clone of the report element
-      const originalElement = reportRef.current;
-      const clone = originalElement.cloneNode(true) as HTMLElement;
+      const element = reportRef.current;
 
-      // Clean up the clone's styles for the PDF container
-      clone.style.position = 'relative'; // Reset position
-      clone.style.top = 'auto';
-      clone.style.left = 'auto';
-      clone.style.zIndex = 'auto';
-      clone.style.width = '800px'; // Fixed width for A4
-      clone.style.margin = '0 auto'; // Center it
-      clone.style.backgroundColor = '#ffffff';
-      clone.style.display = 'block';
-      clone.style.color = '#000000'; // Base color
+      // Save original styles
+      const originalStyle = element.style.cssText;
+      const originalParentStyle = element.parentElement?.style.cssText || '';
 
-      // Force ALL text elements to be black
-      const allElements = clone.querySelectorAll('*');
-      allElements.forEach((el: any) => {
-        if (el.style) {
-          el.style.color = '#000000';
-          // Ensure headings and bold text are black
-          if (['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'STRONG', 'B', 'P', 'SPAN', 'LI', 'TD', 'TH'].includes(el.tagName)) {
-            el.style.color = '#000000';
-          }
-        }
-      });
+      // Temporarily make it visible for capture but off-screen
+      if (element.parentElement) {
+        element.parentElement.style.position = 'fixed';
+        element.parentElement.style.left = '0';
+        element.parentElement.style.top = '0';
+        element.parentElement.style.width = '800px';
+        element.parentElement.style.zIndex = '-9999';
+        element.parentElement.style.pointerEvents = 'none';
+      }
 
-      // Append clone to our fullscreen container
-      container.appendChild(clone);
-      document.body.appendChild(container);
-
-      // Wait for render
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      element.style.display = 'block';
+      element.style.visibility = 'visible';
+      element.style.opacity = '1';
+      element.style.background = 'white';
+      element.style.color = 'black';
 
       // A4 width is 595.28 pt
-      const margin = 30; // Slightly smaller margin
-      const contentWidth = 595.28 - (margin * 2);
+      const margin = 40;
+      const contentWidth = 595.28 - (2 * margin);
 
-      await doc.html(clone, {
-        callback: function (doc) {
-          doc.save(`relatorio-otimizacao-aura-${new Date().toISOString().slice(0, 10)}.pdf`);
-          // Cleanup
-          document.body.removeChild(container);
-          document.body.removeChild(loadingIndicator);
-          setIsPdfGenerating(false);
-        },
+      await doc.html(element, {
         x: margin,
         y: margin,
         width: contentWidth,
         windowWidth: 800,
         autoPaging: 'text',
-        margin: [30, 30, 30, 30],
+        margin: [margin, margin, margin, margin],
         html2canvas: {
-          scale: 2,
+          scale: 1,
           useCORS: true,
           logging: false,
-          allowTaint: true,
-          backgroundColor: '#ffffff',
-          windowWidth: 800
+          backgroundColor: '#ffffff'
         }
       });
+
+      doc.save(`relatorio-otimizacao-aura-${new Date().toISOString().slice(0, 10)}.pdf`);
+
+      // Restore original styles
+      element.style.cssText = originalStyle;
+      if (element.parentElement) {
+        element.parentElement.style.cssText = originalParentStyle;
+      }
+      setIsPdfGenerating(false);
+
     } catch (error) {
       console.error('Erro ao gerar PDF:', error);
       alert('Erro ao gerar o PDF. Tente novamente.');
       setIsPdfGenerating(false);
-      if (document.body.contains(container)) document.body.removeChild(container);
-      if (document.body.contains(loadingIndicator)) document.body.removeChild(loadingIndicator);
     }
   };
 
