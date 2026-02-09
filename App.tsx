@@ -107,7 +107,7 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
     const hashParamsFromUrl = new URLSearchParams(window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '');
 
     const emailParam = searchParams.get('email') || hashParamsFromUrl.get('email');
-    const flowParam = searchParams.get('flow');
+    const flowParam = searchParams.get('flow') || hashParamsFromUrl.get('flow');
 
     if (emailParam) {
       setAuthMode('register');
@@ -290,7 +290,7 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
                   <div className="w-14 h-14 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto"><Lock size={28} /></div>
                   <h3 className="text-lg font-bold">Acesso Restrito</h3>
                   <p className="text-xs text-slate-500">Cadastro exclusivo para assinantes Aura.</p>
-                  <button onClick={() => window.open('https://cakto.com.br/aura/assinar', '_blank')} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-xs tracking-widest transition-transform active:scale-95">Assinar Agora</button>
+                  <button onClick={() => window.open('https://asaas.com/c/aura-assinar', '_blank')} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-xs tracking-widest transition-transform active:scale-95">Assinar Agora</button>
                   <button onClick={() => setAuthMode('login')} className="w-full text-slate-400 font-bold text-[10px] uppercase tracking-widest">Voltar ao Login</button>
                 </div>
               ) : (
@@ -348,7 +348,7 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
                     <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 rounded-xl">
                       <p className="text-[10px] leading-relaxed text-blue-700 dark:text-blue-300 font-medium">
                         <span className="font-black uppercase block mb-1">Aviso Importante</span>
-                        Insira o e-mail que você utilizou no momento da compra na <strong>Cakto Pay</strong>. Precisamos dele para validar sua assinatura ativa.
+                        Insira o e-mail que você utilizou no momento da compra no <strong>Asaas</strong>. Precisamos dele para validar sua assinatura ativa.
                       </p>
                     </div>
                     <div className="relative">
