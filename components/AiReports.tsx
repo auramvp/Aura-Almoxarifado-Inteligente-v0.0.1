@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 import {
   Bot, Calendar, FileText, Loader2,
   Printer, Sparkles, AlertTriangle, FileDown,
@@ -123,60 +124,80 @@ export const AiReports = () => {
     setIsPdfGenerating(true);
 
     try {
-      const doc = new jsPDF({
-        unit: 'pt',
-        format: 'a4',
-        orientation: 'portrait'
-      });
-
       const element = reportRef.current;
 
-      // Save original styles
-      const originalStyle = element.style.cssText;
-      const originalParentStyle = element.parentElement?.style.cssText || '';
+      // Create a temporary container to isolate from app styles (especially dark mode)
+      const captureContainer = document.createElement('div');
+      captureContainer.style.position = 'fixed';
+      captureContainer.style.left = '-9999px';
+      captureContainer.style.top = '0';
+      captureContainer.style.width = '800px';
+      captureContainer.style.backgroundColor = 'white';
+      captureContainer.className = 'light'; // Force light theme if app uses class-based dark mode
 
-      // Temporarily make it visible for capture but off-screen
-      if (element.parentElement) {
-        element.parentElement.style.position = 'fixed';
-        element.parentElement.style.left = '0';
-        element.parentElement.style.top = '0';
-        element.parentElement.style.width = '800px';
-        element.parentElement.style.zIndex = '-9999';
-        element.parentElement.style.pointerEvents = 'none';
-      }
+      // Clone the report content
+      const clone = element.cloneNode(true) as HTMLElement;
+      clone.style.display = 'block';
+      clone.style.visibility = 'visible';
+      clone.style.opacity = '1';
+      clone.style.background = 'white';
+      clone.style.padding = '40px';
+      clone.style.width = '800px';
 
-      element.style.display = 'block';
-      element.style.visibility = 'visible';
-      element.style.opacity = '1';
-      element.style.background = 'white';
-      element.style.color = 'black';
-
-      // A4 width is 595.28 pt
-      const margin = 40;
-      const contentWidth = 595.28 - (2 * margin);
-
-      await doc.html(element, {
-        x: margin,
-        y: margin,
-        width: contentWidth,
-        windowWidth: 800,
-        autoPaging: 'text',
-        margin: [margin, margin, margin, margin],
-        html2canvas: {
-          scale: 1,
-          useCORS: true,
-          logging: false,
-          backgroundColor: '#ffffff'
+      // Force all text inside to be black and remove dark mode overrides
+      const allElements = clone.querySelectorAll('*');
+      allElements.forEach((el: any) => {
+        if (el.style) {
+          el.style.color = '#000000';
+          el.style.backgroundColor = 'transparent';
         }
+        // Remove Tailwind dark mode classes that might interfere
+        el.classList.remove('dark:text-white', 'text-white', 'dark:prose-invert', 'prose-invert', 'dark:bg-slate-900', 'bg-slate-900');
       });
 
-      doc.save(`relatorio-otimizacao-aura-${new Date().toISOString().slice(0, 10)}.pdf`);
+      captureContainer.appendChild(clone);
+      document.body.appendChild(captureContainer);
 
-      // Restore original styles
-      element.style.cssText = originalStyle;
-      if (element.parentElement) {
-        element.parentElement.style.cssText = originalParentStyle;
+      // Wait a tiny bit for layout
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const canvas = await html2canvas(clone, {
+        scale: 2, // High resolution
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        windowWidth: 800
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'pt', 'a4');
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+
+      // Calculate dimensions to fit A4
+      const imgWidth = pdfWidth;
+      const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      // Add first page
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pdfHeight;
+
+      // Add subsequent pages if content is longer than one page
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pdfHeight;
       }
+
+      pdf.save(`relatorio-otimizacao-aura-${new Date().toISOString().slice(0, 10)}.pdf`);
+
+      // Cleanup
+      document.body.removeChild(captureContainer);
       setIsPdfGenerating(false);
 
     } catch (error) {
