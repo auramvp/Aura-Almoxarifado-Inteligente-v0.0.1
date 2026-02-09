@@ -1103,12 +1103,20 @@ const Movements = ({ user }: any) => {
                                   </div>
                                   <div>
                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Responsável</label>
-                                    <input
-                                      type="text"
+                                    <select
                                       className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-sm text-slate-800 dark:text-white"
                                       value={returnProcessing!.returnPerson}
                                       onChange={e => setReturnProcessing({ ...returnProcessing!, returnPerson: e.target.value })}
-                                    />
+                                    >
+                                      <option value="">Selecione...</option>
+                                      {sector?.people?.map((p: any, i: number) => (
+                                        <option key={i} value={p.name}>{p.name} {p.matricula ? `(${p.matricula})` : ''}</option>
+                                      ))}
+                                      {/* Fallback if original person is not in the list */}
+                                      {returnProcessing!.returnPerson && !sector?.people?.some((p: any) => p.name === returnProcessing!.returnPerson) && (
+                                        <option value={returnProcessing!.returnPerson}>{returnProcessing!.returnPerson}</option>
+                                      )}
+                                    </select>
                                   </div>
                                 </div>
                                 <div>
