@@ -979,132 +979,129 @@ const Movements = ({ user }: any) => {
         )
       }
 
-    </div >
-
-      {/* Return Modal */ }
-  {
-    isReturnModalOpen && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-        <div className="bg-white dark:bg-slate-900 w-full max-w-4xl max-h-[90vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col border border-white/20">
-          <div className="shrink-0 px-8 py-6 border-b dark:border-slate-800 flex items-center justify-between text-white bg-indigo-600">
-            <div className="flex items-center gap-3">
-              <RotateCcw size={24} />
-              <h3 className="text-xl font-black uppercase tracking-widest">Itens para Devolução</h3>
+      {/* Return Modal */}
+      {isReturnModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-4xl max-h-[90vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col border border-white/20">
+            <div className="shrink-0 px-8 py-6 border-b dark:border-slate-800 flex items-center justify-between text-white bg-indigo-600">
+              <div className="flex items-center gap-3">
+                <RotateCcw size={24} />
+                <h3 className="text-xl font-black uppercase tracking-widest">Itens para Devolução</h3>
+              </div>
+              <button onClick={() => { setIsReturnModalOpen(false); setReturnProcessing(null); }} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition"><X size={20} /></button>
             </div>
-            <button onClick={() => { setIsReturnModalOpen(false); setReturnProcessing(null); }} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition"><X size={20} /></button>
-          </div>
 
-          <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-            {pendingReturns.length === 0 ? (
-              <div className="h-64 flex flex-col items-center justify-center text-slate-400 gap-4">
-                <PackageCheck size={48} className="opacity-20" />
-                <p className="font-bold uppercase tracking-widest text-xs">Nenhuma devolução pendente</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {pendingReturns.map(m => {
-                  const product = products.find(p => p.id === m.productId);
-                  const sector = sectors.find(s => s.id === m.sectorId);
-                  const isProcessingThis = returnProcessing?.movementId === m.id;
+            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+              {pendingReturns.length === 0 ? (
+                <div className="h-64 flex flex-col items-center justify-center text-slate-400 gap-4">
+                  <PackageCheck size={48} className="opacity-20" />
+                  <p className="font-bold uppercase tracking-widest text-xs">Nenhuma devolução pendente</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {pendingReturns.map(m => {
+                    const product = products.find(p => p.id === m.productId);
+                    const sector = sectors.find(s => s.id === m.sectorId);
+                    const isProcessingThis = returnProcessing?.movementId === m.id;
 
-                  return (
-                    <div key={m.id} className={`p-4 rounded-2xl border transition-all ${isProcessingThis ? 'border-indigo-500 bg-indigo-50/30' : 'border-slate-100 dark:border-slate-800 bg-slate-50/50 hover:bg-slate-100/50'}`}>
-                      <div className="flex justify-between items-start gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="px-2 py-0.5 bg-indigo-100 text-indigo-600 rounded text-[10px] font-black uppercase tracking-tighter">Retornável</span>
-                            <p className="font-black text-slate-800 dark:text-slate-100">{product?.description}</p>
-                          </div>
-                          <p className="text-xs text-slate-500 font-bold mb-3">
-                            Saiu para <span className="text-slate-700">{sector?.name}</span> ({m.personName}) em {new Date(m.movementDate).toLocaleDateString('pt-BR')}
-                          </p>
-
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
-                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Quantidade Pendente</p>
-                              <p className="text-lg font-black text-slate-800 dark:text-slate-100">{m.quantity - m.returnedQuantity} / {m.quantity}</p>
+                    return (
+                      <div key={m.id} className={`p-4 rounded-2xl border transition-all ${isProcessingThis ? 'border-indigo-500 bg-indigo-50/30' : 'border-slate-100 dark:border-slate-800 bg-slate-50/50 hover:bg-slate-100/50'}`}>
+                        <div className="flex justify-between items-start gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="px-2 py-0.5 bg-indigo-100 text-indigo-600 rounded text-[10px] font-black uppercase tracking-tighter">Retornável</span>
+                              <p className="font-black text-slate-800 dark:text-slate-100">{product?.description}</p>
                             </div>
-                            {!isProcessingThis && (
-                              <button
-                                onClick={() => setReturnProcessing({ movementId: m.id, quantity: m.quantity - m.returnedQuantity, action: 'RETURN', observation: '', returnPerson: m.personName || '' })}
-                                className="h-full bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition active:scale-95"
-                              >
-                                Processar
-                              </button>
-                            )}
+                            <p className="text-xs text-slate-500 font-bold mb-3">
+                              Saiu para <span className="text-slate-700">{sector?.name}</span> ({m.personName}) em {new Date(m.movementDate).toLocaleDateString('pt-BR')}
+                            </p>
+
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Quantidade Pendente</p>
+                                <p className="text-lg font-black text-slate-800 dark:text-slate-100">{m.quantity - m.returnedQuantity} / {m.quantity}</p>
+                              </div>
+                              {!isProcessingThis && (
+                                <button
+                                  onClick={() => setReturnProcessing({ movementId: m.id, quantity: m.quantity - m.returnedQuantity, action: 'RETURN', observation: '', returnPerson: m.personName || '' })}
+                                  className="h-full bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition active:scale-95"
+                                >
+                                  Processar
+                                </button>
+                              )}
+                            </div>
                           </div>
+
+                          {isProcessingThis && (
+                            <div className="flex-1 space-y-4 border-l pl-6 border-slate-200 dark:border-slate-700 animate-in slide-in-from-right-4 duration-300">
+                              <div className="grid grid-cols-2 gap-3">
+                                <button
+                                  onClick={() => setReturnProcessing({ ...returnProcessing!, action: 'RETURN' })}
+                                  className={`py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition flex items-center justify-center gap-2 ${returnProcessing!.action === 'RETURN' ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}
+                                >
+                                  <PackageCheck size={14} /> Devolvido
+                                </button>
+                                <button
+                                  onClick={() => setReturnProcessing({ ...returnProcessing!, action: 'LOSS' })}
+                                  className={`py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition flex items-center justify-center gap-2 ${returnProcessing!.action === 'LOSS' ? 'bg-rose-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}
+                                >
+                                  <AlertCircle size={14} /> Perda
+                                </button>
+                              </div>
+
+                              <div className="space-y-3">
+                                <div>
+                                  <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Quantidade</label>
+                                  <input
+                                    type="number"
+                                    max={m.quantity - m.returnedQuantity}
+                                    min="1"
+                                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border rounded-lg outline-none font-bold"
+                                    value={returnProcessing!.quantity}
+                                    onChange={e => setReturnProcessing({ ...returnProcessing!, quantity: Number(e.target.value) })}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Responsável pela Devolução</label>
+                                  <input
+                                    type="text"
+                                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border rounded-lg outline-none font-bold"
+                                    value={returnProcessing!.returnPerson}
+                                    onChange={e => setReturnProcessing({ ...returnProcessing!, returnPerson: e.target.value })}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Observação (Opcional)</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Ex: Item com avaria..."
+                                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border rounded-lg outline-none font-bold"
+                                    value={returnProcessing!.observation}
+                                    onChange={e => setReturnProcessing({ ...returnProcessing!, observation: e.target.value })}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="flex gap-2">
+                                <button onClick={() => setReturnProcessing(null)} className="px-4 py-2 bg-slate-100 text-slate-500 rounded-lg text-xs font-black uppercase">Cancelar</button>
+                                <button onClick={handleProcessReturn} disabled={isSaving} className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-xs font-black uppercase shadow-lg disabled:opacity-50">
+                                  {isSaving ? 'Salvando...' : 'Confirmar'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-
-                        {isProcessingThis && (
-                          <div className="flex-1 space-y-4 border-l pl-6 border-slate-200 dark:border-slate-700 animate-in slide-in-from-right-4 duration-300">
-                            <div className="grid grid-cols-2 gap-3">
-                              <button
-                                onClick={() => setReturnProcessing({ ...returnProcessing!, action: 'RETURN' })}
-                                className={`py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition flex items-center justify-center gap-2 ${returnProcessing!.action === 'RETURN' ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}
-                              >
-                                <PackageCheck size={14} /> Devolvido
-                              </button>
-                              <button
-                                onClick={() => setReturnProcessing({ ...returnProcessing!, action: 'LOSS' })}
-                                className={`py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition flex items-center justify-center gap-2 ${returnProcessing!.action === 'LOSS' ? 'bg-rose-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}
-                              >
-                                <AlertCircle size={14} /> Perda
-                              </button>
-                            </div>
-
-                            <div className="space-y-3">
-                              <div>
-                                <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Quantidade</label>
-                                <input
-                                  type="number"
-                                  max={m.quantity - m.returnedQuantity}
-                                  min="1"
-                                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border rounded-lg outline-none font-bold"
-                                  value={returnProcessing!.quantity}
-                                  onChange={e => setReturnProcessing({ ...returnProcessing!, quantity: Number(e.target.value) })}
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Responsável pela Devolução</label>
-                                <input
-                                  type="text"
-                                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border rounded-lg outline-none font-bold"
-                                  value={returnProcessing!.returnPerson}
-                                  onChange={e => setReturnProcessing({ ...returnProcessing!, returnPerson: e.target.value })}
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Observação (Opcional)</label>
-                                <input
-                                  type="text"
-                                  placeholder="Ex: Item com avaria..."
-                                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border rounded-lg outline-none font-bold"
-                                  value={returnProcessing!.observation}
-                                  onChange={e => setReturnProcessing({ ...returnProcessing!, observation: e.target.value })}
-                                />
-                              </div>
-                            </div>
-
-                            <div className="flex gap-2">
-                              <button onClick={() => setReturnProcessing(null)} className="px-4 py-2 bg-slate-100 text-slate-500 rounded-lg text-xs font-black uppercase">Cancelar</button>
-                              <button onClick={handleProcessReturn} disabled={isSaving} className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-xs font-black uppercase shadow-lg disabled:opacity-50">
-                                {isSaving ? 'Salvando...' : 'Confirmar'}
-                              </button>
-                            </div>
-                          </div>
-                        )}
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
-    )
-  }
-    </div >
+      )
+      }
+    </div>
   );
 };
 
