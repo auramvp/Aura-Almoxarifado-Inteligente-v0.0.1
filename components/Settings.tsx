@@ -893,7 +893,7 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                       {subscription.plan?.name !== 'Partners' && (
                         <div className="flex flex-wrap gap-4">
                           <button
-                            onClick={() => window.open('https://cakto.com.br/aura/upgrade', '_blank')}
+                            onClick={() => window.open('https://asaas.com/c/aura-upgrade', '_blank')}
                             className="px-8 py-4 bg-white text-blue-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-50 transition shadow-xl shadow-blue-900/40 flex items-center gap-2 group active:scale-95"
                           >
                             Trocar de Plano <ChevronRight size={16} className="group-hover:translate-x-1 transition" />

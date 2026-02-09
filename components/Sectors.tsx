@@ -4,7 +4,8 @@ import { db } from '../services/db';
 import { Sector, SectorPerson } from '../types';
 import {
   Plus, Edit, Trash2, X, Save, Users, Building2,
-  Palette, UserPlus, UserMinus, Hash, User
+  Palette, UserPlus, UserMinus, Hash, User,
+  BarChart3, ChevronLeft, DollarSign, Calendar, Package
 } from 'lucide-react';
 
 const Sectors = ({ user }: any) => {
@@ -20,6 +21,9 @@ const Sectors = ({ user }: any) => {
   });
 
   const [newPerson, setNewPerson] = useState({ name: '', matricula: '' });
+  const [isConsumptionModalOpen, setIsConsumptionModalOpen] = useState(false);
+  const [selectedSectorConsumption, setSelectedSectorConsumption] = useState<{ sector: Sector, total: number, movements: any[] } | null>(null);
+  const [loadingConsumption, setLoadingConsumption] = useState(false);
 
   const canEdit = user.role === 'ALMOXARIFE' || user.permissions?.sectors === 'full';
 
@@ -89,6 +93,23 @@ const Sectors = ({ user }: any) => {
     }
   };
 
+  const handleViewConsumption = async (s: Sector) => {
+    setLoadingConsumption(true);
+    setIsConsumptionModalOpen(true);
+    try {
+      const data = await db.getSectorConsumption(s.id);
+      setSelectedSectorConsumption({ sector: s, ...data });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingConsumption(false);
+    }
+  };
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  };
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -139,6 +160,7 @@ const Sectors = ({ user }: any) => {
             <div key={s.id} className="bg-white dark:bg-slate-900 rounded-[24px] border border-slate-200 dark:border-slate-800 p-4 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
               <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-10">
                 <button onClick={() => handleOpenModal(s)} className="p-1.5 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-sm text-slate-400 hover:text-blue-600 rounded-lg transition-all"><Edit size={14} /></button>
+                <button onClick={() => handleViewConsumption(s)} className="p-1.5 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-sm text-slate-400 hover:text-emerald-600 rounded-lg transition-all"><BarChart3 size={14} /></button>
                 <button onClick={() => handleDelete(s.id)} className="p-1.5 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-sm text-slate-400 hover:text-red-500 rounded-lg transition-all"><Trash2 size={14} /></button>
               </div>
 
@@ -201,14 +223,119 @@ const Sectors = ({ user }: any) => {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2">
-                      <button onClick={() => handleOpenModal(s)} className="p-2 text-slate-400 hover:text-blue-600 transition-all hover:bg-white dark:hover:bg-slate-700 rounded-xl shadow-sm"><Edit size={16} /></button>
-                      <button onClick={() => handleDelete(s.id)} className="p-2 text-slate-400 hover:text-red-600 transition-all hover:bg-white dark:hover:bg-slate-700 rounded-xl shadow-sm"><Trash2 size={16} /></button>
+                      <button onClick={() => handleOpenModal(s)} className="p-2 text-slate-400 hover:text-blue-600 transition-all hover:bg-white dark:hover:bg-slate-700 rounded-xl shadow-sm" title="Editar"><Edit size={16} /></button>
+                      <button onClick={() => handleViewConsumption(s)} className="p-2 text-slate-400 hover:text-emerald-600 transition-all hover:bg-white dark:hover:bg-slate-700 rounded-xl shadow-sm" title="Consumo"><BarChart3 size={16} /></button>
+                      <button onClick={() => handleDelete(s.id)} className="p-2 text-slate-400 hover:text-red-600 transition-all hover:bg-white dark:hover:bg-slate-700 rounded-xl shadow-sm" title="Excluir"><Trash2 size={16} /></button>
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {isConsumptionModalOpen && selectedSectorConsumption && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-[32px] shadow-2xl w-full max-w-4xl overflow-hidden border dark:border-slate-800 animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+            <div className="px-8 py-6 border-b dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-white dark:bg-slate-800 shadow-sm border dark:border-slate-700" style={{ borderLeft: `4px solid ${selectedSectorConsumption.sector.color}` }}>
+                  <BarChart3 className="text-emerald-500" size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black uppercase tracking-widest text-slate-800 dark:text-slate-100">
+                    Consumo: {selectedSectorConsumption.sector.name}
+                  </h3>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-tighter">Histórico de saídas e gastos</p>
+                </div>
+              </div>
+              <button onClick={() => setIsConsumptionModalOpen(false)} className="p-2 text-slate-400 hover:text-red-500 transition hover:bg-white dark:hover:bg-slate-800 rounded-full"><X size={24} /></button>
+            </div>
+
+            <div className="p-8 overflow-y-auto space-y-8 flex-1 custom-scrollbar">
+              {/* Stats Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-emerald-50 dark:bg-emerald-900/10 p-6 rounded-[24px] border border-emerald-100 dark:border-emerald-800/30">
+                  <div className="flex items-center gap-3 mb-2">
+                    <DollarSign className="text-emerald-600" size={20} />
+                    <span className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Consumo Total</span>
+                  </div>
+                  <p className="text-2xl font-black text-emerald-700 dark:text-emerald-400">{formatCurrency(selectedSectorConsumption.total)}</p>
+                </div>
+
+                <div className="bg-blue-50 dark:bg-blue-900/10 p-6 rounded-[24px] border border-blue-100 dark:border-blue-800/30">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Package className="text-blue-600" size={20} />
+                    <span className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Itens Retirados</span>
+                  </div>
+                  <p className="text-2xl font-black text-blue-700 dark:text-blue-400">{selectedSectorConsumption.movements.reduce((acc, m) => acc + m.quantity, 0)}</p>
+                </div>
+
+                <div className="bg-purple-50 dark:bg-purple-900/10 p-6 rounded-[24px] border border-purple-100 dark:border-purple-800/30">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Calendar className="text-purple-600" size={20} />
+                    <span className="text-[10px] font-black uppercase text-purple-600 tracking-widest">Média de Saídas</span>
+                  </div>
+                  <p className="text-2xl font-black text-purple-700 dark:text-purple-400">{selectedSectorConsumption.movements.length > 0 ? formatCurrency(selectedSectorConsumption.total / selectedSectorConsumption.movements.length) : 'R$ 0,00'}</p>
+                </div>
+              </div>
+
+              {/* History Table */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-black uppercase text-slate-800 dark:text-slate-200 tracking-widest flex items-center gap-2">
+                    <Users size={16} className="text-slate-400" /> Histórico Detalhado
+                  </h4>
+                </div>
+
+                <div className="bg-white dark:bg-slate-800/30 border dark:border-slate-800 rounded-2xl overflow-hidden overflow-x-auto shadow-sm">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-800/50">
+                        <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Data</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Produto</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Responsável</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest text-right">Qtd</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest text-right">Valor</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {selectedSectorConsumption.movements.map((m, i) => (
+                        <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                          <td className="px-6 py-4 text-xs font-bold text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                            {new Date(m.movementDate).toLocaleDateString('pt-BR')}
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-xs font-bold text-slate-800 dark:text-slate-200">Produto ID: {m.productId.slice(0, 8)}...</p>
+                            {/* In a real scenario you'd want the product name here, but for simplicity we show the result we have */}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{m.personName || 'Não informado'}</span>
+                          </td>
+                          <td className="px-6 py-4 text-right font-black text-slate-800 dark:text-slate-200 text-xs text-amber-500">
+                            -{m.quantity}
+                          </td>
+                          <td className="px-6 py-4 text-right font-black text-slate-800 dark:text-slate-200 text-xs">
+                            {formatCurrency(m.totalValue)}
+                          </td>
+                        </tr>
+                      ))}
+                      {selectedSectorConsumption.movements.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-8 text-center text-slate-400 italic text-sm">Nenhuma movimentação de saída para este setor.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-8 py-6 border-t dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-end">
+              <button onClick={() => setIsConsumptionModalOpen(false)} className="px-6 py-3 bg-white dark:bg-slate-700 border dark:border-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition shadow-sm">Fechar</button>
+            </div>
+          </div>
         </div>
       )}
 

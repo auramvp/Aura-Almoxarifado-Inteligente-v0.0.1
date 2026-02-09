@@ -584,6 +584,13 @@ export const db = {
     return data;
   },
 
+  async getSectorConsumption(sectorId: string): Promise<{ total: number; movements: StockMovement[] }> {
+    const movements = await this.getMovements();
+    const sectorMovements = movements.filter(m => m.sectorId === sectorId && m.type === MovementType.OUT);
+    const total = sectorMovements.reduce((acc, m) => acc + m.totalValue, 0);
+    return { total, movements: sectorMovements };
+  },
+
   async createSupportTicket(description: string): Promise<SupportTicket> {
     const user = await this.getCurrentUser();
     if (!user?.companyId) throw new Error("Usuário sem empresa");
@@ -820,7 +827,7 @@ export const db = {
     if (!user?.companyId) return [];
     const { data } = await supabase.from('stock_movements').select('*').eq('company_id', user.companyId).order('created_at', { ascending: false });
     return (data || []).map(m => ({
-      id: m.id, companyId: m.company_id, movementDate: m.movement_date, monthRef: m.month_ref, productId: m.product_id, supplierId: m.supplier_id, sectorId: m.sector_id, personName: m.person_name, type: m.type as MovementType, quantity: Number(m.quantity || 0), totalValue: Number(m.total_value || 0), destination: m.destination, invoiceNumber: m.invoice_number, invoiceDate: m.invoice_date, invoiceValue: Number(m.invoice_value || 0), pmedAtTime: Number(m.pmed_at_time || 0), createdByUserId: m.created_by_user_id, createdAt: m.created_at, originId: m.origin_id || ''
+      id: m.id, companyId: m.company_id, movementDate: m.movement_date, monthRef: m.month_ref, productId: m.product_id, supplierId: m.supplier_id, sectorId: m.sector_id, personName: m.person_name, type: m.type as MovementType, quantity: Number(m.quantity || 0), totalValue: Number(m.total_value || 0), destination: m.destination, invoiceNumber: m.invoice_number, invoiceDate: m.invoice_date, invoiceValue: Number(m.invoice_value || 0), invoiceUrl: m.invoice_url, pmedAtTime: Number(m.pmed_at_time || 0), createdByUserId: m.created_by_user_id, createdAt: m.created_at, originId: m.origin_id || ''
     })) as StockMovement[];
   },
 
@@ -852,6 +859,7 @@ export const db = {
       type: m.type, quantity: m.quantity, total_value: m.totalValue,
       destination: normalize(m.destination), invoice_number: m.invoiceNumber,
       invoice_date: m.invoiceDate || null, invoice_value: m.invoiceValue || 0,
+      invoice_url: m.invoiceUrl || null,
       pmed_at_time: Number(product.pmed || 0), created_by_user_id: userData.user?.id || 'system',
       company_id: user.companyId
     };

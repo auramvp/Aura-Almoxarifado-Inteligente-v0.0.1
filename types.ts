@@ -226,6 +226,9 @@ export interface StockMovement {
   quantity: number;
   totalValue: number;
   invoiceNumber?: string;
+  invoiceDate?: string;
+  invoiceValue?: number;
+  invoiceUrl?: string;
   fromLocationId?: string;
   toLocationId?: string;
   destination?: string;
