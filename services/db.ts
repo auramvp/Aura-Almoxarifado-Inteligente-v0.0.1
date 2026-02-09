@@ -877,7 +877,8 @@ export const db = {
       exit_type: m.exitType || null,
       returned_quantity: Number(m.returnedQuantity || 0),
       return_status: m.returnStatus || 'OK',
-      return_observation: m.returnObservation || null
+      return_observation: m.returnObservation || null,
+      origin_id: m.originId || null
     };
     const { data, error } = await supabase.from('stock_movements').insert(payload).select().single();
     if (error) throw error;
