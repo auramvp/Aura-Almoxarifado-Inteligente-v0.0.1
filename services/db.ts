@@ -1109,19 +1109,25 @@ export const db = {
   },
 
   async getActiveBanners(): Promise<any[]> {
+    // We fetch all active banners and filter dates in JS to handle NULLs effectively
+    // because Supabase filters are rigid with NULLs in range queries
     const { data, error } = await supabase
       .from('banners')
       .select('*')
       .eq('is_active', true)
-      .lte('start_date', new Date().toISOString())
-      .gte('end_date', new Date().toISOString())
       .order('created_at', { ascending: false });
 
     if (error) {
       console.error('Error fetching banners:', error);
       return [];
     }
-    return data || [];
+
+    const now = new Date().toISOString();
+    return (data || []).filter(banner => {
+      const starts = !banner.start_date || banner.start_date <= now;
+      const ends = !banner.end_date || banner.end_date >= now;
+      return starts && ends;
+    });
   },
   async addExportLog(userId: string, type: string, count: number, details: string): Promise<void> {
     const payload = {

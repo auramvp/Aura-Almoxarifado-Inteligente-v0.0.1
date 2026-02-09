@@ -272,10 +272,12 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
 
   React.useEffect(() => {
     if (company?.settings?.alerts) {
-      setAlertSettings({
-        ...alertSettings,
-        ...company.settings.alerts
-      });
+      setAlertSettings(prev => ({
+        ...prev,
+        ...company.settings.alerts,
+        // Ensure strings are handled correctly even if null in DB
+        alertEmails: company.settings.alerts.alertEmails || ''
+      }));
     }
   }, [company]);
 
@@ -312,23 +314,9 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
 
       if (btn) btn.innerHTML = '<span class="mr-2">✅</span> Salvo!';
 
-      // Enviar e-mail de confirmação
-      const emails = getEmailsArray();
-      if (emails.length > 0) {
-        const daysOfWeek = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-        const selectedDays = alertSettings.alertDays?.map(d => daysOfWeek[d]) || [];
-
-        EmailService.sendAlertScheduleConfirmation({
-          to: emails,
-          days: selectedDays,
-          startTime: alertSettings.alertStartTime || '08:00',
-          endTime: alertSettings.alertEndTime || '18:00'
-        }).catch(err => console.error('Erro ao enviar e-mail de confirmação:', err));
-      }
-
       setTimeout(() => {
-        if (btn) btn.innerHTML = originalText;
-      }, 2000);
+        window.location.reload();
+      }, 1000);
 
     } catch (error: any) {
       console.error('Error saving alerts:', error);
