@@ -116,9 +116,9 @@ const Optimization = ({ user }: any) => {
             </button>
             <button
               onClick={() => setActiveTab('ai')}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 shadow-lg shadow-indigo-500/20 ${activeTab === 'ai'
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white ring-2 ring-offset-2 ring-blue-600 dark:ring-offset-slate-900'
-                : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white opacity-90 hover:opacity-100 hover:scale-105'
+              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 shadow-lg shadow-blue-500/20 ${activeTab === 'ai'
+                ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white ring-2 ring-offset-2 ring-blue-600 dark:ring-offset-slate-900'
+                : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white opacity-90 hover:opacity-100 hover:scale-105'
                 }`}
             >
               <Sparkles size={14} />
