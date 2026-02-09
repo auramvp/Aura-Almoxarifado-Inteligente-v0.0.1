@@ -477,6 +477,35 @@ export const db = {
   },
 
   async hasActiveSubscription(email: string): Promise<boolean> {
+    const result = await this.validateAsaasSubscription(email);
+    return result.valid;
+  },
+
+  async validateAsaasSubscription(email: string, cpfCnpj?: string): Promise<{ valid: boolean; status: string; message: string }> {
+    try {
+      const { data, error } = await supabase.functions.invoke('validate-subscription', {
+        body: { email, cpfCnpj }
+      });
+
+      if (error) {
+        console.error('Error calling validate-subscription:', error);
+        // Fallback to local database check
+        return this.fallbackSubscriptionCheck(email);
+      }
+
+      return {
+        valid: data.valid || false,
+        status: data.status || 'ERROR',
+        message: data.message || 'Erro ao validar assinatura'
+      };
+    } catch (err) {
+      console.error('Exception in validateAsaasSubscription:', err);
+      return this.fallbackSubscriptionCheck(email);
+    }
+  },
+
+  async fallbackSubscriptionCheck(email: string): Promise<{ valid: boolean; status: string; message: string }> {
+    // Fallback to local database if Edge Function fails
     const { data, error } = await supabase
       .from('subscriptions')
       .select('status')
@@ -484,21 +513,14 @@ export const db = {
       .in('status', ['active', 'Ativo', 'trialing', 'trial'])
       .limit(1);
 
-    if (error) return false;
-    return (data && data.length > 0);
+    if (error || !data || data.length === 0) {
+      return { valid: false, status: 'NOT_FOUND', message: 'Nenhuma assinatura encontrada.' };
+    }
+    return { valid: true, status: 'ACTIVE', message: 'Assinatura válida (verificação local).' };
   },
 
-  async verifyCaktoOnboarding(email: string): Promise<{ valid: boolean; plan?: string }> {
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .select('status, plan')
-      .eq('email', email)
-      .in('status', ['active', 'Ativo', 'trialing', 'trial'])
-      .limit(1)
-      .single();
-
-    if (error || !data) return { valid: false };
-    return { valid: true, plan: data.plan };
+  async verifyAsaasOnboarding(email: string): Promise<{ valid: boolean; status?: string; message?: string }> {
+    return this.validateAsaasSubscription(email);
   },
 
   async getSectors(): Promise<Sector[]> {

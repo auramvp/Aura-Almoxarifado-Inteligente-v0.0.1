@@ -93,6 +93,10 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
   const [formData, setFormData] = useState({ name: '', email: '', password: '', accessCode: '', magicEmail: '' });
   const [registerData, setRegisterData] = useState({ name: '', email: '', password: '', confirmPassword: '', companyName: '', cnpj: '', address: '', phone: '', contactEmail: '' });
 
+  // Track if email/CNPJ came from URL (should be readonly)
+  const [emailFromUrl, setEmailFromUrl] = useState(false);
+  const [cnpjFromUrl, setCnpjFromUrl] = useState(false);
+
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
@@ -133,12 +137,14 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
     if (emailParam) {
       setAuthMode('register');
       setRegisterData(prev => ({ ...prev, email: emailParam }));
+      setEmailFromUrl(true);
       checkSubscription(emailParam);
 
       // Se CNPJ também foi fornecido, pré-preencher e buscar dados
       if (cnpjParam) {
         const formattedCNPJ = cnpjParam.replace(/\D/g, '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
         setRegisterData(prev => ({ ...prev, cnpj: formattedCNPJ }));
+        setCnpjFromUrl(true);
         fetchCNPJData(cnpjParam);
       }
     } else if (flowParam === 'onboarding') {
@@ -149,6 +155,7 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
       if (cnpjParam) {
         const formattedCNPJ = cnpjParam.replace(/\D/g, '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
         setRegisterData(prev => ({ ...prev, cnpj: formattedCNPJ }));
+        setCnpjFromUrl(true);
         fetchCNPJData(cnpjParam);
       }
     }
@@ -179,16 +186,28 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
 
   const checkSubscription = async (email: string) => {
     setLoading(true);
+    setError(null);
     try {
-      const hasSub = await db.hasActiveSubscription(email);
+      const result = await db.validateAsaasSubscription(email);
       if (authMode === 'onboarding') {
-        if (hasSub) setOnboardingStep(2);
-        else setError("Nenhuma assinatura ativa encontrada para este e-mail.");
+        if (result.valid) {
+          setOnboardingStep(2);
+          if (result.status === 'TRIAL') {
+            setSuccessMessage('Período trial de 7 dias ativo!');
+          }
+        } else {
+          setError(result.message || 'Nenhuma assinatura ativa encontrada.');
+        }
       } else {
-        setRegisterStep(hasSub ? 1 : 0);
+        if (result.valid) {
+          setRegisterStep(1);
+        } else {
+          setError(result.message || 'Nenhuma assinatura ativa encontrada.');
+          setRegisterStep(0);
+        }
       }
     } catch (err) {
-      if (authMode === 'onboarding') setError("Erro ao verificar assinatura.");
+      if (authMode === 'onboarding') setError('Erro ao verificar assinatura.');
       else setRegisterStep(0);
     } finally { setLoading(false); }
   };
@@ -345,18 +364,34 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
                           required
                           type="email"
                           placeholder="E-mail da Compra"
-                          className={inputClass + (registerData.email ? " opacity-60 cursor-not-allowed" : "")}
+                          readOnly={emailFromUrl}
+                          className={inputClass + (emailFromUrl ? " opacity-60 cursor-not-allowed bg-slate-100 dark:bg-slate-700" : "")}
                           value={registerData.email}
-                          onChange={e => !registerData.email && setRegisterData({ ...registerData, email: e.target.value })}
-                          onBlur={() => registerData.email && checkSubscription(registerData.email)}
+                          onChange={e => !emailFromUrl && setRegisterData({ ...registerData, email: e.target.value })}
+                          onBlur={() => registerData.email && !emailFromUrl && checkSubscription(registerData.email)}
                         />
+                        {emailFromUrl && <Lock className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />}
                       </div>
                       <div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="password" placeholder="Senha" className={inputClass} value={registerData.password} onChange={e => setRegisterData({ ...registerData, password: e.target.value })} /></div>
                       <div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="password" placeholder="Confirmar Senha" className={inputClass} value={registerData.confirmPassword} onChange={e => setRegisterData({ ...registerData, confirmPassword: e.target.value })} /></div>
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <div className="relative"><Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="CNPJ" className={inputClass} value={registerData.cnpj} onChange={e => setRegisterData({ ...registerData, cnpj: formatCNPJ(e.target.value) })} onBlur={handleCNPJBlur} />{loading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-blue-600" size={16} />}</div>
+                      <div className="relative">
+                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                          required
+                          type="text"
+                          placeholder="CNPJ"
+                          readOnly={cnpjFromUrl}
+                          className={inputClass + (cnpjFromUrl ? " opacity-60 cursor-not-allowed bg-slate-100 dark:bg-slate-700" : "")}
+                          value={registerData.cnpj}
+                          onChange={e => !cnpjFromUrl && setRegisterData({ ...registerData, cnpj: formatCNPJ(e.target.value) })}
+                          onBlur={() => !cnpjFromUrl && handleCNPJBlur()}
+                        />
+                        {cnpjFromUrl && <Lock className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />}
+                        {loading && !cnpjFromUrl && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-blue-600" size={16} />}
+                      </div>
                       <div className="relative"><Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="Empresa" className={inputClass} value={registerData.companyName} onChange={e => setRegisterData({ ...registerData, companyName: e.target.value })} /></div>
                       <div className="relative"><MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="Endereço" className={inputClass} value={registerData.address} onChange={e => setRegisterData({ ...registerData, address: e.target.value })} /></div>
                     </div>
@@ -411,7 +446,21 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <div className="relative"><Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="CNPJ da Empresa" className={inputClass} value={registerData.cnpj} onChange={e => setRegisterData({ ...registerData, cnpj: formatCNPJ(e.target.value) })} onBlur={handleCNPJBlur} />{loading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-blue-600" size={16} />}</div>
+                    <div className="relative">
+                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                      <input
+                        required
+                        type="text"
+                        placeholder="CNPJ da Empresa"
+                        readOnly={cnpjFromUrl}
+                        className={inputClass + (cnpjFromUrl ? " opacity-60 cursor-not-allowed bg-slate-100 dark:bg-slate-700" : "")}
+                        value={registerData.cnpj}
+                        onChange={e => !cnpjFromUrl && setRegisterData({ ...registerData, cnpj: formatCNPJ(e.target.value) })}
+                        onBlur={() => !cnpjFromUrl && handleCNPJBlur()}
+                      />
+                      {cnpjFromUrl && <Lock className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />}
+                      {loading && !cnpjFromUrl && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-blue-600" size={16} />}
+                    </div>
                     <div className="relative"><Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="Nome Fantasia" className={inputClass} value={registerData.companyName} onChange={e => setRegisterData({ ...registerData, companyName: e.target.value })} /></div>
                     <div className="relative"><MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="Endereço Completo" className={inputClass} value={registerData.address} onChange={e => setRegisterData({ ...registerData, address: e.target.value })} /></div>
                   </div>
