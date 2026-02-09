@@ -29,7 +29,7 @@ const Movements = ({ user }: any) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterSector, setFilterSector] = useState('all');
-  const [filterType, setFilterType] = useState<'all' | MovementType>('all');
+  const [filterType, setFilterType] = useState<'all' | MovementType | 'RETURN'>('all');
   const [filterProductType, setFilterProductType] = useState<'all' | ProductType>('all');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -242,7 +242,8 @@ const Movements = ({ user }: any) => {
 
       const matchesCategory = filterCategory === 'all' || prod?.categoryId === filterCategory;
       const matchesSector = filterSector === 'all' || m.sectorId === filterSector;
-      const matchesType = filterType === 'all' || m.type === filterType;
+      const matchesType = filterType === 'all' ||
+        (filterType === 'RETURN' ? m.originId === 'DEV_RETORNO' : m.type === filterType);
       const matchesProductType = filterProductType === 'all' || prod?.type === filterProductType;
 
       return matchesSearch && matchesCategory && matchesSector && matchesType && matchesProductType;
@@ -507,6 +508,7 @@ const Movements = ({ user }: any) => {
                 <option value="all">Todas</option>
                 <option value={MovementType.IN}>Entradas</option>
                 <option value={MovementType.OUT}>Saídas</option>
+                <option value="RETURN">Devoluções</option>
               </select>
               <select className="px-3 py-2 bg-white dark:bg-slate-900/50 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg text-sm outline-none min-w-[140px]" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
                 <option value="all">Categorias</option>
@@ -540,6 +542,7 @@ const Movements = ({ user }: any) => {
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                 {filteredMovements.length > 0 ? filteredMovements.map(m => {
                   const prod = products.find(p => p.id === m.productId);
+                  const isReturn = m.originId === 'DEV_RETORNO';
                   return (
                     <tr key={m.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-400">{new Date(m.movementDate).toLocaleDateString('pt-BR')}</td>
@@ -548,10 +551,13 @@ const Movements = ({ user }: any) => {
                         <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono font-bold tracking-widest">{prod?.cod}</p>
                       </td>
                       <td className="px-6 py-4">
-                        {m.type === MovementType.IN ?
-                          <span className="text-emerald-600 dark:text-emerald-400 font-black text-[10px] bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded">ENTRADA</span> :
+                        {isReturn ? (
+                          <span className="text-purple-600 dark:text-purple-400 font-black text-[10px] bg-purple-50 dark:bg-purple-900/20 px-2 py-1 rounded">DEVOLUÇÃO</span>
+                        ) : m.type === MovementType.IN ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-black text-[10px] bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded">ENTRADA</span>
+                        ) : (
                           <span className="text-amber-600 dark:text-amber-400 font-black text-[10px] bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded">SAÍDA</span>
-                        }
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col gap-0.5">
