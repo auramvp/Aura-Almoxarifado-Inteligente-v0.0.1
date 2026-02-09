@@ -180,7 +180,7 @@ const Dashboard = ({ user }: { user: User }) => {
         </div>
 
         {/* AI Insight */}
-        <div className="bg-gradient-to-br from-[#4F9EFF] to-[#3B82F6] p-6 rounded-xl shadow-lg text-white flex flex-col relative overflow-hidden group min-h-[220px]">
+        <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-6 rounded-xl shadow-lg text-white flex flex-col relative overflow-hidden group min-h-[220px]">
           <div className="absolute -right-10 -top-10 p-12 opacity-15 group-hover:scale-110 transition-transform duration-700">
             <Sparkles size={180} />
           </div>
