@@ -243,7 +243,7 @@ const Movements = ({ user }: any) => {
       const matchesCategory = filterCategory === 'all' || prod?.categoryId === filterCategory;
       const matchesSector = filterSector === 'all' || m.sectorId === filterSector;
       const matchesType = filterType === 'all' ||
-        (filterType === 'RETURN' ? (m.originId === 'DEV_RETORNO' || m.destination?.startsWith('RETORNO DE')) : m.type === filterType);
+        (filterType === 'RETURN' ? (m.originId === 'DEV_RETORNO' || m.destination?.toUpperCase().includes('RETORNO')) : m.type === filterType);
       const matchesProductType = filterProductType === 'all' || prod?.type === filterProductType;
 
       return matchesSearch && matchesCategory && matchesSector && matchesType && matchesProductType;
@@ -542,7 +542,7 @@ const Movements = ({ user }: any) => {
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                 {filteredMovements.length > 0 ? filteredMovements.map(m => {
                   const prod = products.find(p => p.id === m.productId);
-                  const isReturn = m.originId === 'DEV_RETORNO' || m.destination?.startsWith('RETORNO DE');
+                  const isReturn = m.originId === 'DEV_RETORNO' || m.destination?.toUpperCase().includes('RETORNO');
                   return (
                     <tr key={m.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-400">{new Date(m.movementDate).toLocaleDateString('pt-BR')}</td>
