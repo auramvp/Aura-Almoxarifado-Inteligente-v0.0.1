@@ -85,6 +85,7 @@ const Movements = ({ user }: any) => {
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [showInvoice, setShowInvoice] = useState(false);
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
 
   const selectedProduct = useMemo(() => {
     return products.find(p => p.id === formData.productId);
@@ -304,7 +305,9 @@ const Movements = ({ user }: any) => {
 
       await loadData();
       setReturnProcessing(null);
-      alert('Operação realizada com sucesso!');
+      await loadData();
+      setReturnProcessing(null);
+      setIsSuccessModalOpen(true);
     } catch (error: any) {
       alert('Erro: ' + error.message);
     } finally {
@@ -1098,7 +1101,13 @@ const Movements = ({ user }: any) => {
                                       min="1"
                                       className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-black text-lg text-slate-800 dark:text-white"
                                       value={returnProcessing!.quantity}
-                                      onChange={e => setReturnProcessing({ ...returnProcessing!, quantity: Number(e.target.value) })}
+                                      onChange={e => {
+                                        const val = Number(e.target.value);
+                                        const max = m.quantity - m.returnedQuantity;
+                                        if (val > max) setReturnProcessing({ ...returnProcessing!, quantity: max });
+                                        else if (val < 1) setReturnProcessing({ ...returnProcessing!, quantity: 1 });
+                                        else setReturnProcessing({ ...returnProcessing!, quantity: val });
+                                      }}
                                     />
                                   </div>
                                   <div>
@@ -1151,6 +1160,27 @@ const Movements = ({ user }: any) => {
         </div>
       )
       }
+
+      {/* Success Modal */}
+      {isSuccessModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2rem] shadow-2xl p-6 flex flex-col items-center text-center animate-in zoom-in-95 duration-200 border border-white/20">
+            <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mb-4 shadow-lg shadow-emerald-500/20">
+              <CheckCircle2 size={32} />
+            </div>
+            <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2">Sucesso!</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 font-medium">
+              A devolução/perda foi processada e o estoque atualizado corretamente.
+            </p>
+            <button
+              onClick={() => setIsSuccessModalOpen(false)}
+              className="w-full py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl font-black text-xs uppercase tracking-widest hover:opacity-90 transition active:scale-95 shadow-lg"
+            >
+              Continuar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
