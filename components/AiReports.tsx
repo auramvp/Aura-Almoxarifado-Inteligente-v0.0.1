@@ -125,15 +125,61 @@ export const AiReports = () => {
 
     try {
       const element = reportRef.current;
+      const now = new Date();
+      const formattedDate = new Intl.DateTimeFormat('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).format(now);
 
-      // Create a temporary container to isolate from app styles (especially dark mode)
+      // Create a temporary container to isolate from app styles
       const captureContainer = document.createElement('div');
       captureContainer.style.position = 'fixed';
       captureContainer.style.left = '-9999px';
       captureContainer.style.top = '0';
       captureContainer.style.width = '800px';
       captureContainer.style.backgroundColor = 'white';
-      captureContainer.className = 'light'; // Force light theme if app uses class-based dark mode
+      captureContainer.className = 'light';
+
+      // Create Header with Logo and Data/Hora
+      const header = document.createElement('div');
+      header.style.display = 'flex';
+      header.style.justifyContent = 'space-between';
+      header.style.alignItems = 'center';
+      header.style.borderBottom = '2px solid #3b82f6';
+      header.style.paddingBottom = '20px';
+      header.style.marginBottom = '30px';
+      header.style.paddingLeft = '60px';
+      header.style.paddingRight = '60px';
+      header.style.paddingTop = '40px';
+
+      header.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 15px;">
+          <img src="https://zdgapmcalocdvdgvbwsj.supabase.co/storage/v1/object/public/AuraLogo/preto.png" style="height: 40px; width: auto;" />
+        </div>
+        <div style="text-align: right;">
+          <p style="margin: 0; font-size: 14px; font-weight: 800; color: #1e293b; text-transform: uppercase;">${companyName || 'EMPRESA AURA'}</p>
+          <p style="margin: 0; font-size: 11px; color: #64748b;">Relatório Inteligente Aura IA</p>
+          <p style="margin: 0; font-size: 10px; color: #94a3b8;">Gerado em ${formattedDate}</p>
+        </div>
+      `;
+
+      // Create Footer
+      const footer = document.createElement('div');
+      footer.style.borderTop = '1px solid #e2e8f0';
+      footer.style.marginTop = '40px';
+      footer.style.paddingTop = '20px';
+      footer.style.paddingBottom = '40px';
+      footer.style.textAlign = 'center';
+      footer.style.paddingLeft = '60px';
+      footer.style.paddingRight = '60px';
+      footer.innerHTML = `
+        <p style="margin: 0; font-size: 11px; color: #94a3b8; font-weight: bold; letter-spacing: 1px;">
+          Gerado por <span style="color: #3b82f6;">AURA IA</span> • Almoxarifado Inteligente
+        </p>
+      `;
 
       // Clone the report content
       const clone = element.cloneNode(true) as HTMLElement;
@@ -141,28 +187,37 @@ export const AiReports = () => {
       clone.style.visibility = 'visible';
       clone.style.opacity = '1';
       clone.style.background = 'white';
-      clone.style.padding = '40px';
+      clone.style.paddingLeft = '60px';
+      clone.style.paddingRight = '60px';
       clone.style.width = '800px';
 
-      // Force all text inside to be black and remove dark mode overrides
+      // Force all text inside to be smaller and black
       const allElements = clone.querySelectorAll('*');
       allElements.forEach((el: any) => {
         if (el.style) {
           el.style.color = '#000000';
           el.style.backgroundColor = 'transparent';
+
+          // Reduzindo tamanhos de fonte (.prose tem fontes grandes)
+          if (el.classList.contains('text-3xl')) el.style.fontSize = '24px';
+          else if (el.classList.contains('text-2xl')) el.style.fontSize = '20px';
+          else if (el.classList.contains('text-xl')) el.style.fontSize = '16px';
+          else if (el.classList.contains('text-lg')) el.style.fontSize = '14px';
+          else el.style.fontSize = '12px';
         }
-        // Remove Tailwind dark mode classes that might interfere
         el.classList.remove('dark:text-white', 'text-white', 'dark:prose-invert', 'prose-invert', 'dark:bg-slate-900', 'bg-slate-900');
       });
 
+      captureContainer.appendChild(header);
       captureContainer.appendChild(clone);
+      captureContainer.appendChild(footer);
       document.body.appendChild(captureContainer);
 
-      // Wait a tiny bit for layout
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Wait for layout and images to load
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      const canvas = await html2canvas(clone, {
-        scale: 2, // High resolution
+      const canvas = await html2canvas(captureContainer, {
+        scale: 2,
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
@@ -175,18 +230,17 @@ export const AiReports = () => {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
 
-      // Calculate dimensions to fit A4
       const imgWidth = pdfWidth;
       const imgHeight = (canvas.height * pdfWidth) / canvas.width;
 
       let heightLeft = imgHeight;
       let position = 0;
 
-      // Add first page
+      // First page
       pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
       heightLeft -= pdfHeight;
 
-      // Add subsequent pages if content is longer than one page
+      // Subsequent pages
       while (heightLeft > 0) {
         position = heightLeft - imgHeight;
         pdf.addPage();
@@ -194,7 +248,7 @@ export const AiReports = () => {
         heightLeft -= pdfHeight;
       }
 
-      pdf.save(`relatorio-otimizacao-aura-${new Date().toISOString().slice(0, 10)}.pdf`);
+      pdf.save(`relatorio-otimizacao-aura-${now.toISOString().slice(0, 10)}.pdf`);
 
       // Cleanup
       document.body.removeChild(captureContainer);
