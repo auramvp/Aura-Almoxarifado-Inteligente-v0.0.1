@@ -133,10 +133,15 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
     const emailParam = searchParams.get('email') || hashParamsFromUrl.get('email');
     const flowParam = searchParams.get('flow') || hashParamsFromUrl.get('flow');
     const cnpjParam = searchParams.get('cnpj') || hashParamsFromUrl.get('cnpj');
+    const nameParam = searchParams.get('name') || hashParamsFromUrl.get('name');
 
     if (emailParam) {
       setAuthMode('register');
-      setRegisterData(prev => ({ ...prev, email: emailParam }));
+      setRegisterData(prev => ({
+        ...prev,
+        email: emailParam,
+        name: nameParam || prev.name
+      }));
       setEmailFromUrl(true);
       checkSubscription(emailParam);
 
@@ -289,7 +294,10 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
             { cnpj: registerData.cnpj.replace(/\D/g, ''), name: registerData.companyName, address: registerData.address, email: registerData.contactEmail, phone: registerData.phone, sectorName: 'Geral', sectorResponsible: registerData.name }
           );
           onLogin(user);
-        } catch (err: any) { setError("Erro ao criar conta."); } finally { setLoading(false); }
+        } catch (err: any) {
+          console.error('Erro no registro:', err);
+          setError(err.message || "Erro ao criar conta.");
+        } finally { setLoading(false); }
       }
     } else {
       if (registerStep === 0) return;
@@ -305,7 +313,10 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
             { cnpj: registerData.cnpj.replace(/\D/g, ''), name: registerData.companyName, address: registerData.address, email: registerData.contactEmail, phone: registerData.phone, sectorName: 'Geral', sectorResponsible: registerData.name }
           );
           onLogin(user);
-        } catch (err: any) { setError("Erro ao criar conta."); } finally { setLoading(false); }
+        } catch (err: any) {
+          console.error('Erro no registro:', err);
+          setError(err.message || "Erro ao criar conta.");
+        } finally { setLoading(false); }
       }
     }
   };

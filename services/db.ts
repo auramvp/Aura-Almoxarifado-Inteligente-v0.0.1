@@ -208,15 +208,44 @@ export const db = {
   },
 
   async register(userData: any, companyData: any): Promise<User> {
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: userData.email,
-      password: userData.password,
-    });
+    let finalAuthUser: any;
 
-    if (authError) throw authError;
-    if (!authData.user) throw new Error("Erro ao criar usuário de autenticação.");
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: userData.email,
+        password: userData.password,
+      });
 
-    const { data: company, error: compErr } = await supabase.from('companies').insert({
+      if (authError) {
+        // Se o usuário já existe, tentamos prosseguir se ele estiver autenticado
+        if (authError.message.includes("User already registered") || authError.status === 422) {
+          const { data: { user: currentUser } } = await supabase.auth.getUser();
+          if (currentUser && currentUser.email === userData.email) {
+            finalAuthUser = currentUser;
+          } else {
+            // Se não conseguimos o usuário da sessão, lançamos o erro original
+            throw authError;
+          }
+        } else {
+          throw authError;
+        }
+      } else {
+        finalAuthUser = authData.user;
+      }
+    } catch (err: any) {
+      // Caso de erro no signUp, verificamos se já temos sessão
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (currentUser && currentUser.email === userData.email) {
+        finalAuthUser = currentUser;
+      } else {
+        throw err;
+      }
+    }
+
+    if (!finalAuthUser) throw new Error("Erro ao identificar usuário de autenticação.");
+
+    // 2. Upsert Company (CNPJ is unique)
+    const { data: company, error: compErr } = await supabase.from('companies').upsert({
       cnpj: companyData.cnpj,
       name: companyData.name,
       address: companyData.address,
@@ -228,17 +257,18 @@ export const db = {
       sector_whatsapp: companyData.sectorWhatsApp,
       sector_email: companyData.sectorEmail,
       contact_extra: companyData.contactExtra
-    }).select().single();
+    }, { onConflict: 'cnpj' }).select().single();
 
     if (compErr) throw compErr;
 
-    const { data: user, error: userErr } = await supabase.from('profiles').insert({
-      id: authData.user.id,
+    // 3. Upsert Profile
+    const { data: user, error: userErr } = await supabase.from('profiles').upsert({
+      id: finalAuthUser.id,
       name: userData.name,
       email: userData.email,
       role: UserRole.ALMOXARIFE,
       company_id: company.id
-    }).select().single();
+    }, { onConflict: 'id' }).select().single();
 
     if (userErr) throw userErr;
 
