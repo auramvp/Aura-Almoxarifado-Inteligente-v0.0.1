@@ -91,13 +91,21 @@ const Movements = ({ user }: any) => {
   }, [products, formData.productId]);
 
   const filteredProducts = useMemo(() => {
-    if (!productSearch) return products;
+    let filtered = products;
+
+    // Filter by Exit Type if strictly in OUT mode and RETURNABLE is selected
+    if (movementType === MovementType.OUT && formData.exitType === ExitType.RETURNABLE) {
+      filtered = filtered.filter(p => p.type === ProductType.RETURNABLE);
+    }
+
+    if (!productSearch) return filtered;
+
     const lower = productSearch.toLowerCase();
-    return products.filter(p =>
+    return filtered.filter(p =>
       p.description.toLowerCase().includes(lower) ||
       p.cod.toLowerCase().includes(lower)
     );
-  }, [products, productSearch]);
+  }, [products, productSearch, movementType, formData.exitType]);
 
   const selectedSector = useMemo(() => {
     return sectors.find(s => s.id === formData.sectorId);
