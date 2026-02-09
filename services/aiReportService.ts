@@ -50,7 +50,7 @@ export const AiReportService = {
     // Identify Dead Stock (No OUT movement in 90 days)
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    
+
     const deadStockList: AiReportPayload['dead_stock'] = [];
 
     products.forEach(p => {
@@ -86,7 +86,7 @@ export const AiReportService = {
       const lastOut = movements
         .filter(m => m.productId === p.id && m.type === MovementType.OUT)
         .sort((a, b) => new Date(b.movementDate).getTime() - new Date(a.movementDate).getTime())[0];
-      
+
       const lastMoveDate = lastOut ? new Date(lastOut.movementDate) : new Date(p.createdAt); // If never moved, use creation
       const daysWithoutMove = diffDays(new Date(), lastMoveDate);
 
@@ -111,7 +111,7 @@ export const AiReportService = {
     })).sort((a, b) => b.val - a.val);
 
     const totalConsumption = consumptionList.reduce((acc, item) => acc + item.val, 0);
-    
+
     let accumulated = 0;
     const curveA: any[] = [];
     const curveB: any[] = [];
@@ -196,12 +196,10 @@ export const AiReportService = {
       - Use títulos e subtítulos hierárquicos (#, ##, ###) para organizar o texto.
       - Utilize listas (bullet points) para facilitar a leitura de recomendações e alertas.
 
-      ${userInstruction ? `IMPORTANTE: O usuário forneceu a seguinte instrução específica para este relatório: "${userInstruction}". Adapte a estrutura e o foco do relatório para atender a este pedido.` : `
       ESTRUTURA OBRIGATÓRIA DO RELATÓRIO:
-      1. # Relatório de Otimização de Estoque
-         - Período: DD/MM/AAAA a DD/MM/AAAA
-         - Empresa: [Nome]
+      NÃO adicione cabeçalhos com nome da empresa, período ou assinaturas como "Relatório elaborado por", pois o sistema já adiciona um cabeçalho oficial ao PDF. Comece diretamente pelo Resumo Executivo.
       
+      1. # Relatório de Otimização de Estoque
       2. ## 📋 Resumo Executivo
          - 5 bullet points com os fatos mais importantes do período (ex: valor total movimentado, saúde do estoque).
       
@@ -225,8 +223,7 @@ export const AiReportService = {
       
       8. ## 🛒 Sugestão de Compras (Baseada em Ruptura)
          - Se houver itens em ruptura, liste-os como um checklist simples.
-      `}
-      
+
       Tom de voz: Profissional, direto, analítico e útil.
     `;
 
@@ -241,7 +238,7 @@ export const AiReportService = {
           model: MODEL_NAME,
           messages: [
             { role: "system", content: systemPrompt },
-            { role: "user", content: `Gere o relatório com base neste JSON: ${JSON.stringify(payload)}` }
+            { role: "user", content: `Gere o relatório com base neste JSON: ${JSON.stringify(payload)} ` }
           ],
           temperature: 0.3,
           max_tokens: 4000
@@ -250,14 +247,14 @@ export const AiReportService = {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Erro na API (${response.status}): ${errorData.error?.message || response.statusText}`);
+        throw new Error(`Erro na API(${response.status}): ${errorData.error?.message || response.statusText} `);
       }
 
       const data = await response.json();
       return data.choices[0]?.message?.content || "Erro ao gerar relatório: Resposta vazia da IA.";
     } catch (error: any) {
       console.error("Erro na geração do relatório IA:", error);
-      throw new Error(`Falha na comunicação com IA: ${error.message}`);
+      throw new Error(`Falha na comunicação com IA: ${error.message} `);
     }
   }
 };

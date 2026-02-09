@@ -388,36 +388,6 @@ export const AiReports = () => {
             backgroundColor: '#ffffff'
           }}
         >
-          <div className="flex items-start justify-between border-b-2 border-black pb-8 mb-8" style={{ borderColor: '#000000' }}>
-            <div className="flex items-center gap-5">
-              <div className="w-16 h-16 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-sm overflow-hidden" style={{ backgroundColor: '#2563eb', color: '#ffffff' }}>
-                {companyLogo ? (
-                  <img src={companyLogo} alt="Logo" className="w-full h-full object-cover" />
-                ) : (
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M4 16L12 8L20 16" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight leading-none" style={{ color: '#000000' }}>Aura</h1>
-                <p className="text-xs font-black uppercase tracking-[0.2em] mt-1" style={{ color: '#000000' }}>Almoxarife Inteligente</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-sm font-bold" style={{ color: '#000000' }}>{companyName || 'Empresa Principal'}</p>
-              <p className="text-sm mt-1" style={{ color: '#000000' }}>Relatório Gerado em</p>
-              <p className="text-sm font-medium" style={{ color: '#000000' }}>{new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR')}</p>
-            </div>
-          </div>
-
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold" style={{ color: '#000000' }}>Relatório de Otimização de Estoque</h2>
-            <div className="flex gap-4 mt-2 text-sm" style={{ color: '#000000' }}>
-              <span>Período: <strong style={{ color: '#000000' }}>{new Date(startDate).toLocaleDateString('pt-BR')}</strong> a <strong style={{ color: '#000000' }}>{new Date(endDate).toLocaleDateString('pt-BR')}</strong></span>
-            </div>
-          </div>
-
           <div className="prose max-w-none text-justify leading-relaxed" style={{ color: '#000000' }}>
             <Markdown
               remarkPlugins={[remarkGfm]}
@@ -434,11 +404,6 @@ export const AiReports = () => {
             >
               {report}
             </Markdown>
-          </div>
-
-          <div className="mt-12 pt-6 border-t border-black flex justify-between items-center text-xs" style={{ color: '#000000', borderColor: '#000000' }}>
-            <span>Documento gerado automaticamente por Aura IA</span>
-            <span>Página 1</span>
           </div>
         </div>
       </div>
