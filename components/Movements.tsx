@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../services/db';
-import { MovementType, StockMovement, Category, Product, Supplier, Sector, ProductType } from '../types';
+import { MovementType, StockMovement, Category, Product, Supplier, Sector, ProductType, ExitType, ReturnStatus } from '../types';
 import {
   ArrowUpCircle, ArrowDownCircle, Filter, X, Search, Tag,
   Package, Truck, FilterX, Hash, Navigation, DollarSign,
-  CheckCircle2, AlertCircle, ChevronLeft, User as UserIcon,
-  Building2, Loader2, Users, Plus, Eye, BarChart3,
-  FileText, Download, Upload, Paperclip
+  Calendar, User as UserIcon, Plus, CheckCircle2, ChevronLeft,
+  Loader2, CreditCard, Receipt, FileText, AlertCircle, Trash2,
+  Download, RotateCcw, PackageCheck, BarChart3, Eye, Upload,
+  Paperclip, Building2, Users
 } from 'lucide-react';
 import Sectors from './Sectors';
 import AnalysisDashboard from './AnalysisDashboard';
@@ -19,6 +20,7 @@ const Movements = ({ user }: any) => {
   const [sectors, setSectors] = useState<Sector[]>([]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const [activeTab, setActiveTab] = useState<'movements' | 'invoices'>('movements');
   const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
@@ -71,7 +73,10 @@ const Movements = ({ user }: any) => {
     invoiceUrl: '',
     movementDate: new Date().toISOString().split('T')[0],
     notes: '',
-    originId: 'SISTEMA'
+    originId: 'SISTEMA',
+    exitType: ExitType.CONSUMABLE,
+    returnedQuantity: 0,
+    returnStatus: ReturnStatus.OK
   });
 
   const [displayTotalValue, setDisplayTotalValue] = useState('');
@@ -105,15 +110,20 @@ const Movements = ({ user }: any) => {
 
   // Auto-fill total value for OUT movements based on PMED
   useEffect(() => {
-    if (movementType === MovementType.OUT && selectedProduct) {
-      const val = prev => prev.quantity * selectedProduct.pmed;
-      setFormData(prev => {
-        const newVal = prev.quantity * selectedProduct.pmed;
-        setDisplayTotalValue(formatCurrency(newVal));
-        return { ...prev, totalValue: newVal };
-      });
+    if (formData.productId && movementType === MovementType.OUT) {
+      const product = products.find(p => p.id === formData.productId);
+      if (product) {
+        const estimatedValue = product.pmed * formData.quantity;
+        setFormData(prev => ({
+          ...prev,
+          totalValue: estimatedValue,
+          exitType: product.type === ProductType.RETURNABLE ? ExitType.RETURNABLE : ExitType.CONSUMABLE,
+          returnStatus: product.type === ProductType.RETURNABLE ? ReturnStatus.PENDING : ReturnStatus.OK
+        }));
+        setDisplayTotalValue(formatCurrency(estimatedValue));
+      }
     }
-  }, [movementType, selectedProduct, formData.quantity]);
+  }, [movementType, formData.productId, formData.quantity, products]);
 
   const handleOpenModal = (type: MovementType) => {
     setMovementType(type);
@@ -136,7 +146,10 @@ const Movements = ({ user }: any) => {
       invoiceUrl: '',
       movementDate: new Date().toISOString().split('T')[0],
       notes: '',
-      originId: type === MovementType.IN ? 'ENTRADA' : 'SAÍDA'
+      originId: type === MovementType.IN ? 'ENTRADA' : 'SAÍDA',
+      exitType: ExitType.CONSUMABLE,
+      returnedQuantity: 0,
+      returnStatus: ReturnStatus.OK
     });
     setInvoiceFile(null);
     setIsModalOpen(true);
@@ -230,6 +243,66 @@ const Movements = ({ user }: any) => {
     return movements.filter(m => m.type === MovementType.IN && (m.invoiceNumber || m.invoiceUrl));
   }, [movements]);
 
+  const pendingReturns = useMemo(() => {
+    return movements.filter(m => m.type === MovementType.OUT && m.exitType === ExitType.RETURNABLE && (m.returnStatus === ReturnStatus.PENDING || m.returnStatus === ReturnStatus.PARTIAL));
+  }, [movements]);
+
+  const [returnProcessing, setReturnProcessing] = useState<{
+    movementId: string;
+    quantity: number;
+    action: 'RETURN' | 'LOSS';
+    observation: string;
+  } | null>(null);
+
+  const handleProcessReturn = async () => {
+    if (!returnProcessing) return;
+    setIsSaving(true);
+    try {
+      const originalMovement = movements.find(m => m.id === returnProcessing.movementId);
+      if (!originalMovement) throw new Error("Movimentação original não encontrada");
+
+      const product = products.find(p => p.id === originalMovement.productId);
+      if (!product) throw new Error("Produto não encontrado");
+
+      // 1. Create a new movement record for the return/loss
+      await db.createMovement({
+        productId: originalMovement.productId,
+        type: returnProcessing.action === 'RETURN' ? MovementType.IN : MovementType.OUT,
+        quantity: returnProcessing.quantity,
+        totalValue: 0,
+        sectorId: originalMovement.sectorId,
+        personName: originalMovement.personName,
+        destination: `RETORNO DE ${originalMovement.id.substring(0, 8)}`,
+        notes: `${returnProcessing.action === 'RETURN' ? 'Devolução' : 'Perda registrada'}: ${returnProcessing.observation}`,
+        originId: 'DEV_RETORNO'
+      });
+
+      // 2. Update the original movement status and quantity
+      const newReturnedQty = originalMovement.returnedQuantity + returnProcessing.quantity;
+      let newStatus = ReturnStatus.PENDING;
+
+      if (newReturnedQty >= originalMovement.quantity) {
+        newStatus = returnProcessing.action === 'RETURN' ? ReturnStatus.RETURNED : ReturnStatus.LOST;
+      } else {
+        newStatus = ReturnStatus.PARTIAL;
+      }
+
+      await db.updateMovement(originalMovement.id, {
+        returnedQuantity: newReturnedQty,
+        returnStatus: newStatus,
+        returnObservation: returnProcessing.observation
+      });
+
+      await loadData();
+      setReturnProcessing(null);
+      alert('Operação realizada com sucesso!');
+    } catch (error: any) {
+      alert('Erro: ' + error.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const modalTitle = isConfirming
     ? 'Conferir Lançamento'
     : (movementType === MovementType.IN ? 'Nova Entrada' : 'Nova Saída');
@@ -267,8 +340,19 @@ const Movements = ({ user }: any) => {
               <button onClick={() => handleOpenModal(MovementType.IN)} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg transition font-bold shadow-lg shadow-emerald-600/20 active:scale-95">
                 <Plus size={18} /> Entrada
               </button>
-              <button onClick={() => handleOpenModal(MovementType.OUT)} className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg transition font-bold shadow-lg shadow-amber-600/20 active:scale-95">
+              <button
+                onClick={() => handleOpenModal(MovementType.OUT)}
+                disabled={!canEdit}
+                className="flex items-center gap-2 px-6 py-3 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition font-black text-xs uppercase tracking-widest shadow-lg shadow-amber-500/20 disabled:opacity-50 disabled:grayscale"
+              >
                 <ArrowDownCircle size={18} /> Saída
+              </button>
+              <button
+                onClick={() => setIsReturnModalOpen(true)}
+                disabled={!canEdit}
+                className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:grayscale"
+              >
+                <RotateCcw size={18} /> Devolução
               </button>
             </div>
           )}
@@ -637,10 +721,32 @@ const Movements = ({ user }: any) => {
 
                     <div className="grid grid-cols-2 gap-6">
                       <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Quantidade</label>
-                        <input required type="number" min="1" className="w-full px-5 py-4 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-black text-xl" value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: Number(e.target.value) })} />
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 text-center">Tipo de Saída</label>
+                        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700 h-[60px]">
+                          <button
+                            type="button"
+                            onClick={() => setFormData({ ...formData, exitType: ExitType.CONSUMABLE, returnStatus: ReturnStatus.OK })}
+                            className={`flex-1 flex items-center justify-center gap-2 rounded-xl transition font-black text-[10px] uppercase tracking-wider ${formData.exitType === ExitType.CONSUMABLE ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                          >
+                            Consumível
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFormData({ ...formData, exitType: ExitType.RETURNABLE, returnStatus: ReturnStatus.PENDING })}
+                            className={`flex-1 flex items-center justify-center gap-2 rounded-xl transition font-black text-[10px] uppercase tracking-wider ${formData.exitType === ExitType.RETURNABLE ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                          >
+                            <RotateCcw size={14} /> Retornável
+                          </button>
+                        </div>
                       </div>
                       <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Quantidade</label>
+                        <input required type="number" min="1" className="w-full px-5 py-4 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-black text-xl h-[60px]" value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: Number(e.target.value) })} />
+                      </div>
+                    </div>
+
+                    {formData.exitType === ExitType.CONSUMABLE && (
+                      <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
                           {movementType === MovementType.IN ? 'Valor Total da Compra (R$)' : 'Valor Estimado (R$)'}
                         </label>
@@ -653,7 +759,7 @@ const Movements = ({ user }: any) => {
                           onChange={handleTotalValueChange}
                         />
                       </div>
-                    </div>
+                    )}
 
                     {
                       movementType === MovementType.IN && (

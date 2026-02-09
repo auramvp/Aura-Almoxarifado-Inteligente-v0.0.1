@@ -5,8 +5,8 @@ import {
   MovementType, StockBalance, AuditLog, Location,
   Supplier, DashboardStats, Category, Company, Sector,
   TaxAnalysisRequest, TaxDocument, Plan, Subscription, Invoice,
-  SupportTicket
-} from '../types.ts';
+  SupportTicket, ProductType, ExitType, ReturnStatus
+} from '../types';
 import { AlertService } from './alertService';
 
 export { supabase };
@@ -828,7 +828,18 @@ export const db = {
     if (!user?.companyId) return [];
     const { data } = await supabase.from('stock_movements').select('*').eq('company_id', user.companyId).order('created_at', { ascending: false });
     return (data || []).map(m => ({
-      id: m.id, companyId: m.company_id, movementDate: m.movement_date, monthRef: m.month_ref, productId: m.product_id, supplierId: m.supplier_id, sectorId: m.sector_id, personName: m.person_name, type: m.type as MovementType, quantity: Number(m.quantity || 0), totalValue: Number(m.total_value || 0), destination: m.destination, invoiceNumber: m.invoice_number, invoiceDate: m.invoice_date, invoiceValue: Number(m.invoice_value || 0), invoiceUrl: m.invoice_url, pmedAtTime: Number(m.pmed_at_time || 0), createdByUserId: m.created_by_user_id, createdAt: m.created_at, originId: m.origin_id || ''
+      id: m.id, companyId: m.company_id, movementDate: m.movement_date, monthRef: m.month_ref,
+      productId: m.product_id, supplierId: m.supplier_id, sectorId: m.sector_id,
+      personName: m.person_name, type: m.type as MovementType,
+      quantity: Number(m.quantity || 0), totalValue: Number(m.total_value || 0),
+      destination: m.destination, invoiceNumber: m.invoice_number, invoiceDate: m.invoice_date,
+      invoiceValue: Number(m.invoice_value || 0), invoiceUrl: m.invoice_url,
+      pmedAtTime: Number(m.pmed_at_time || 0), createdByUserId: m.created_by_user_id,
+      createdAt: m.created_at, originId: m.origin_id || '',
+      exitType: m.exit_type as ExitType,
+      returnedQuantity: Number(m.returned_quantity || 0),
+      returnStatus: m.return_status as ReturnStatus,
+      returnObservation: m.return_observation
     })) as StockMovement[];
   },
 
@@ -862,7 +873,11 @@ export const db = {
       invoice_date: m.invoiceDate || null, invoice_value: m.invoiceValue || 0,
       invoice_url: m.invoiceUrl || null,
       pmed_at_time: Number(product.pmed || 0), created_by_user_id: userData.user?.id || 'system',
-      company_id: user.companyId
+      company_id: user.companyId,
+      exit_type: m.exitType || null,
+      returned_quantity: Number(m.returnedQuantity || 0),
+      return_status: m.returnStatus || 'OK',
+      return_observation: m.returnObservation || null
     };
     const { data, error } = await supabase.from('stock_movements').insert(payload).select().single();
     if (error) throw error;
@@ -900,6 +915,16 @@ export const db = {
     }
 
     return data as StockMovement;
+  },
+
+  async updateMovement(id: string, updates: Partial<StockMovement>): Promise<void> {
+    const payload: any = {};
+    if (updates.returnedQuantity !== undefined) payload.returned_quantity = updates.returnedQuantity;
+    if (updates.returnStatus !== undefined) payload.return_status = updates.returnStatus;
+    if (updates.returnObservation !== undefined) payload.return_observation = updates.returnObservation;
+
+    const { error } = await supabase.from('stock_movements').update(payload).eq('id', id);
+    if (error) throw error;
   },
 
   async getStockBalances(): Promise<StockBalance[]> {

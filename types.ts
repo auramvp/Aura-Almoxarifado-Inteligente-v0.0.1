@@ -218,6 +218,19 @@ export enum MovementType {
   OUT = 'OUT'
 }
 
+export enum ExitType {
+  CONSUMABLE = 'CONSUMABLE',
+  RETURNABLE = 'RETURNABLE'
+}
+
+export enum ReturnStatus {
+  PENDING = 'PENDING',
+  PARTIAL = 'PARTIAL',
+  RETURNED = 'RETURNED',
+  LOST = 'LOST',
+  OK = 'OK'
+}
+
 export interface StockMovement {
   id: string;
   companyId: string;
@@ -243,6 +256,12 @@ export interface StockMovement {
   notes?: string;
   createdByUserId: string;
   createdAt: string;
+
+  // Novos campos para devolução
+  exitType?: ExitType;
+  returnedQuantity: number;
+  returnStatus?: ReturnStatus;
+  returnObservation?: string;
 }
 
 export interface StockBalance {
