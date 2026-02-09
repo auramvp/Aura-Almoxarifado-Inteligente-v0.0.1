@@ -101,6 +101,26 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
+  // Função para buscar dados do CNPJ
+  const fetchCNPJData = async (cnpj: string) => {
+    const cleanCNPJ = cnpj.replace(/\D/g, '');
+    if (cleanCNPJ.length === 14) {
+      try {
+        const response = await fetch(`https://publica.cnpj.ws/cnpj/${cleanCNPJ}`);
+        const data = await response.json();
+        if (data && data.estabelecimento) {
+          setRegisterData(prev => ({
+            ...prev,
+            companyName: data.razao_social || data.estabelecimento.nome_fantasia || '',
+            address: `${data.estabelecimento.tipo_logradouro} ${data.estabelecimento.logradouro}, ${data.estabelecimento.numero} - ${data.estabelecimento.bairro}, ${data.estabelecimento.cidade.nome} - ${data.estabelecimento.estado.sigla}`,
+            phone: data.estabelecimento.ddd1 && data.estabelecimento.telefone1 ? `(${data.estabelecimento.ddd1}) ${data.estabelecimento.telefone1}` : '',
+            contactEmail: data.estabelecimento.email || ''
+          }));
+        }
+      } catch (err) { console.error('Erro ao buscar CNPJ:', err); }
+    }
+  };
+
   useEffect(() => {
     // 1. Check Search and Hash Params (Query)
     const searchParams = new URL(window.location.href).searchParams;
@@ -108,14 +128,29 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
 
     const emailParam = searchParams.get('email') || hashParamsFromUrl.get('email');
     const flowParam = searchParams.get('flow') || hashParamsFromUrl.get('flow');
+    const cnpjParam = searchParams.get('cnpj') || hashParamsFromUrl.get('cnpj');
 
     if (emailParam) {
       setAuthMode('register');
       setRegisterData(prev => ({ ...prev, email: emailParam }));
       checkSubscription(emailParam);
+
+      // Se CNPJ também foi fornecido, pré-preencher e buscar dados
+      if (cnpjParam) {
+        const formattedCNPJ = cnpjParam.replace(/\D/g, '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+        setRegisterData(prev => ({ ...prev, cnpj: formattedCNPJ }));
+        fetchCNPJData(cnpjParam);
+      }
     } else if (flowParam === 'onboarding') {
       setAuthMode('onboarding');
       setOnboardingStep(1);
+
+      // Se CNPJ foi fornecido no onboarding, pré-preencher
+      if (cnpjParam) {
+        const formattedCNPJ = cnpjParam.replace(/\D/g, '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+        setRegisterData(prev => ({ ...prev, cnpj: formattedCNPJ }));
+        fetchCNPJData(cnpjParam);
+      }
     }
 
     // 2. Check Auth Errors/Callbacks
