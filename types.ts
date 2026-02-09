@@ -268,6 +268,7 @@ export interface DashboardStats {
   topConsumerSector?: { name: string; value: number };
   previousMonthExits: number;
   aiInsight?: { title: string; content: string; type: 'success' | 'warning' | 'info' };
+  lastUpdated: string;
 }
 
 // AI Report Payload

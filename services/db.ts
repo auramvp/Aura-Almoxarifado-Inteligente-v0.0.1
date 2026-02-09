@@ -963,24 +963,49 @@ export const db = {
       value: sectorConsumptionMap[topSectorId]
     } : undefined;
 
+    // Enhanced AI Insights Logic
     let aiInsight: { title: string; content: string; type: 'success' | 'warning' | 'info' } = {
       title: "Análise de Consumo",
-      content: "Mantenha o controle do estoque atualizado para melhores insights.",
+      content: "Mantenha o registro de entradas e saídas em dia para insights mais precisos.",
       type: 'info'
     };
-    if (exitsValue > prevExitsValue && prevExitsValue > 0) {
-      const increase = ((exitsValue - prevExitsValue) / prevExitsValue) * 100;
+
+    const belowMinRatio = products.length > 0 ? (belowMin / products.length) : 0;
+    const inactiveProducts = products.filter(p => !movements.some(m => m.productId === p.id)).length;
+    const inactiveRatio = products.length > 0 ? (inactiveProducts / products.length) : 0;
+
+    // Priority: Alerts > Economy > Inactivity > Generic
+    if (belowMinRatio > 0.15) {
       aiInsight = {
-        title: "Alerta de Gasto",
-        content: `O consumo mensal aumentou ${increase.toFixed(1)}% em relação ao mês anterior.`,
+        title: "Risco de Ruptura",
+        content: `Atenção: ${(belowMinRatio * 100).toFixed(0)}% do seu catálogo está abaixo do estoque mínimo. Recomendamos reposição imediata.`,
         type: 'warning'
       };
     } else if (exitsValue < prevExitsValue && prevExitsValue > 0) {
       const decrease = ((prevExitsValue - exitsValue) / prevExitsValue) * 100;
       aiInsight = {
         title: "Economia Detectada",
-        content: `Você reduziu os gastos em ${decrease.toFixed(1)}% comparado ao mês passado.`,
+        content: `Você reduziu os custos operacionais em ${decrease.toFixed(1)}% comparado ao mês passado. Ótimo trabalho!`,
         type: 'success'
+      };
+    } else if (inactiveRatio > 0.3) {
+      aiInsight = {
+        title: "Estoque Ocioso",
+        content: `Detectamos que ${(inactiveRatio * 100).toFixed(0)}% dos seus itens não tiveram movimentação recente. Considere revisar o mix de produtos.`,
+        type: 'info'
+      };
+    } else if (exitsValue > prevExitsValue && prevExitsValue > 0) {
+      const increase = ((exitsValue - prevExitsValue) / prevExitsValue) * 100;
+      aiInsight = {
+        title: "Aumento de Demanda",
+        content: `O consumo este mês subiu ${increase.toFixed(1)}%. Verifique se há necessidade de ajuste no planejamento de compras.`,
+        type: 'warning'
+      };
+    } else if (trueTotalInventoryValue > 50000) {
+      aiInsight = {
+        title: "Patrimônio Robusto",
+        content: `Seu almoxarifado gerencia atualmente mais de ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(50000)} em ativos.`,
+        type: 'info'
       };
     }
 
@@ -995,7 +1020,8 @@ export const db = {
       mostConsumedProduct,
       topConsumerSector,
       previousMonthExits: prevExitsValue,
-      aiInsight
+      aiInsight,
+      lastUpdated: new Date().toISOString()
     };
   },
 

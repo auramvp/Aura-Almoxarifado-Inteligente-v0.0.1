@@ -48,6 +48,12 @@ const Dashboard = ({ user }: { user: User }) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
   };
 
+  const formatLastUpdated = (dateStr: string) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return `Atualizado às ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')} de ${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+  };
+
   if (loading || !stats) {
     return (
       <div className="h-full flex flex-col items-center justify-center space-y-4 animate-in fade-in">
@@ -174,32 +180,38 @@ const Dashboard = ({ user }: { user: User }) => {
         </div>
 
         {/* AI Insight */}
-        <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-6 rounded-xl shadow-lg text-white flex flex-col relative overflow-hidden group min-h-[200px]">
-          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform duration-700">
-            <Sparkles size={120} />
+        <div className="bg-gradient-to-br from-[#4F9EFF] to-[#3B82F6] p-6 rounded-xl shadow-lg text-white flex flex-col relative overflow-hidden group min-h-[220px]">
+          <div className="absolute -right-10 -top-10 p-12 opacity-15 group-hover:scale-110 transition-transform duration-700">
+            <Sparkles size={180} />
           </div>
 
           <div className="relative z-10 flex items-center gap-2 mb-4">
-            <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-              <Sparkles size={20} className="text-yellow-300" />
+            <div className="p-2 bg-white/20 rounded-lg backdrop-blur-md">
+              <Sparkles size={20} className="text-white" />
             </div>
-            <h3 className="font-bold tracking-tight">Aura AI Insights</h3>
+            <h3 className="font-black text-xs uppercase tracking-[0.2em] opacity-90">Aura AI Insights</h3>
           </div>
 
           <div className="relative z-10 flex-1 flex flex-col justify-center">
             {stats.aiInsight ? (
               <>
-                <h4 className="font-bold text-xl mb-3">{stats.aiInsight.title}</h4>
-                <p className="text-indigo-100 text-sm leading-relaxed opacity-90 max-w-md">{stats.aiInsight.content}</p>
+                <h4 className="font-black text-2xl mb-2 tracking-tight drop-shadow-sm">{stats.aiInsight.title}</h4>
+                <p className="text-white text-sm leading-relaxed font-medium opacity-90 max-w-md">{stats.aiInsight.content}</p>
               </>
             ) : (
-              <p className="text-indigo-100 text-sm">Analisando dados para gerar insights...</p>
+              <div className="flex items-center gap-2">
+                <Loader2 size={16} className="animate-spin" />
+                <p className="text-white text-sm font-bold">Analisando dados estratégicos...</p>
+              </div>
             )}
           </div>
 
-          <div className="relative z-10 mt-6 pt-4 border-t border-white/10 flex items-center justify-between text-xs text-indigo-200">
-            <span>Atualizado agora</span>
-            <span className="bg-white/10 px-2 py-1 rounded">BETA</span>
+          <div className="relative z-10 mt-6 pt-4 border-t border-white/20 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/50" />
+              <span className="text-[10px] font-bold text-white/80 uppercase tracking-widest">{formatLastUpdated(stats.lastUpdated)}</span>
+            </div>
+            <span className="bg-white/20 px-2 py-0.5 rounded text-[10px] font-black tracking-widest">BETA</span>
           </div>
         </div>
       </div>
