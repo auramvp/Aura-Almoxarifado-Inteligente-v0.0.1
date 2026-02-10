@@ -7,7 +7,7 @@ import {
   Loader2, AlertCircle, CheckCircle, Sparkles, Eye, EyeOff, Users,
   Mail, Lock, ShoppingCart, KeyRound, LifeBuoy, MapPin
 } from 'lucide-react';
-import { db } from './services/db.ts';
+import { db, supabase } from './services/db.ts';
 import { User, UserRole, Company } from './types.ts';
 
 // Views
@@ -81,6 +81,35 @@ const Logo = ({ collapsed, size = 'md' }: { collapsed: boolean; size?: 'sm' | 'm
   );
 };
 
+declare global {
+  interface Window {
+    turnstile: any;
+  }
+}
+
+const TurnstileWidget = ({ onVerify, onExpire, siteKey }: { onVerify: (token: string) => void, onExpire: () => void, siteKey: string }) => {
+  const widgetRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (window.turnstile && widgetRef.current) {
+      const widgetId = window.turnstile.render(widgetRef.current, {
+        sitekey: siteKey,
+        callback: onVerify,
+        'expired-callback': onExpire,
+        theme: 'auto',
+      });
+
+      return () => {
+        if (window.turnstile && widgetId) {
+          window.turnstile.remove(widgetId);
+        }
+      };
+    }
+  }, [siteKey]);
+
+  return <div ref={widgetRef} className="flex justify-center my-4" />;
+};
+
 const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgotPassword' | 'onboarding'>('login');
   const [loading, setLoading] = useState(false);
@@ -89,6 +118,8 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [registerStep, setRegisterStep] = useState(1);
   const [onboardingStep, setOnboardingStep] = useState(1);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const TURNSTILE_SITE_KEY = "0x4AAAAAACaSmlBs51Op_RRa";
 
   const [formData, setFormData] = useState({ name: '', email: '', password: '', accessCode: '', magicEmail: '' });
   const [registerData, setRegisterData] = useState({ name: '', email: '', password: '', confirmPassword: '', companyName: '', cnpj: '', address: '', phone: '', contactEmail: '' });
@@ -270,11 +301,19 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
 
   const handleMagicLinkLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!turnstileToken) { setError("Por favor, complete a verificação de segurança."); return; }
     setLoading(true); setError(null); setSuccessMessage(null);
     try {
+      const { data, error: vError } = await supabase.functions.invoke('verify-turnstile', {
+        body: { token: turnstileToken }
+      });
+      if (vError || !data.success) { setError("Verificação de segurança falhou. Tente novamente."); return; }
+
       await db.sendMagicLink(formData.magicEmail);
       setSuccessMessage(`Link enviado para ${formData.magicEmail}! Verifique sua caixa de entrada.`);
       setFormData(prev => ({ ...prev, magicEmail: '' }));
+      if (window.turnstile) window.turnstile.reset();
+      setTurnstileToken(null);
     } catch (err: any) { setError("Erro ao enviar link."); } finally { setLoading(false); }
   };
 
@@ -282,6 +321,18 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
     e.preventDefault();
 
     if (authMode === 'onboarding') {
+      if (onboardingStep === 1) {
+        if (!turnstileToken) { setError("Por favor, complete a verificação de segurança."); return; }
+        setLoading(true); setError(null);
+        try {
+          const { data, error: vError } = await db.supabase.functions.invoke('verify-turnstile', {
+            body: { token: turnstileToken }
+          });
+          if (vError || !data.success) { setError("Verificação de segurança falhou."); return; }
+          checkSubscription(registerData.email);
+        } catch (err) { setError("Erro de verificação."); } finally { setLoading(false); }
+        return;
+      }
       if (onboardingStep === 2) {
         if (registerData.password !== registerData.confirmPassword) { setError("Senhas não coincidem."); return; }
         if (passwordStrength < 3) { setError("Senha muito fraca."); return; }
@@ -322,19 +373,39 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setError(null); setLoading(true);
+    e.preventDefault();
+    if (!turnstileToken) { setError("Por favor, complete a verificação de segurança."); return; }
+    setError(null); setLoading(true);
     try {
+      const { data, error: vError } = await supabase.functions.invoke('verify-turnstile', {
+        body: { token: turnstileToken }
+      });
+      if (vError || !data.success) { setError("Verificação de segurança falhou."); return; }
+
       const user = await db.login(formData.email, formData.password);
       if (user) onLogin(user);
-      else setError("Credenciais inválidas.");
+      else {
+        setError("Credenciais inválidas.");
+        if (window.turnstile) window.turnstile.reset();
+        setTurnstileToken(null);
+      }
     } catch (err: any) { setError("Erro ao conectar."); } finally { setLoading(false); }
   };
 
   const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault(); setError(null); setSuccessMessage(null); setLoading(true);
+    e.preventDefault();
+    if (!turnstileToken) { setError("Por favor, complete a verificação de segurança."); return; }
+    setError(null); setSuccessMessage(null); setLoading(true);
     try {
+      const { data, error: vError } = await supabase.functions.invoke('verify-turnstile', {
+        body: { token: turnstileToken }
+      });
+      if (vError || !data.success) { setError("Verificação de segurança falhou."); return; }
+
       await db.resetPassword(formData.email);
       setSuccessMessage("Instruções enviadas!");
+      if (window.turnstile) window.turnstile.reset();
+      setTurnstileToken(null);
     } catch (err: any) { setError("Erro ao recuperar."); } finally { setLoading(false); }
   };
 
@@ -443,6 +514,11 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
                         onChange={e => setRegisterData({ ...registerData, email: e.target.value })}
                       />
                     </div>
+                    <TurnstileWidget
+                      siteKey={TURNSTILE_SITE_KEY}
+                      onVerify={setTurnstileToken}
+                      onExpire={() => setTurnstileToken(null)}
+                    />
                   </div>
                 ) : onboardingStep === 2 ? (
                   <div className="space-y-3">
@@ -491,6 +567,11 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
               {error && <div className="p-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-bold border border-red-100">{error}</div>}
               {successMessage && <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-bold border border-emerald-100">{successMessage}</div>}
               <div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="email" placeholder="Seu e-mail" className={inputClass} value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} /></div>
+              <TurnstileWidget
+                siteKey={TURNSTILE_SITE_KEY}
+                onVerify={setTurnstileToken}
+                onExpire={() => setTurnstileToken(null)}
+              />
               <button onClick={handleForgotPassword} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest active:scale-95 transition-all">{loading ? <Loader2 className="animate-spin mx-auto" size={16} /> : 'Enviar Instruções'}</button>
               <button onClick={() => setAuthMode('login')} className="w-full text-slate-400 font-bold text-[10px] uppercase tracking-widest">Voltar ao Login</button>
             </div>
@@ -504,6 +585,11 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
                   <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Login Sem Senha</label>
                   <div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="email" placeholder="seu@email.com" className={inputClass} value={formData.magicEmail} onChange={e => setFormData({ ...formData, magicEmail: e.target.value })} /></div>
                 </div>
+                <TurnstileWidget
+                  siteKey={TURNSTILE_SITE_KEY}
+                  onVerify={setTurnstileToken}
+                  onExpire={() => setTurnstileToken(null)}
+                />
                 <button onClick={handleMagicLinkLogin} disabled={loading || !formData.magicEmail} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg shadow-blue-500/20 active:scale-95 transition-all">{loading ? <Loader2 className="animate-spin mx-auto" size={16} /> : 'Link Mágico'}</button>
               </div>
 
