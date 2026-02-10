@@ -96,7 +96,7 @@ const TurnstileWidget = ({ onVerify, onExpire, siteKey }: { onVerify: (token: st
         sitekey: siteKey,
         callback: onVerify,
         'expired-callback': onExpire,
-        theme: 'auto',
+        theme: 'dark',
       });
 
       return () => {
@@ -325,7 +325,7 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
         if (!turnstileToken) { setError("Por favor, complete a verificação de segurança."); return; }
         setLoading(true); setError(null);
         try {
-          const { data, error: vError } = await db.supabase.functions.invoke('verify-turnstile', {
+          const { data, error: vError } = await supabase.functions.invoke('verify-turnstile', {
             body: { token: turnstileToken }
           });
           if (vError || !data.success) { setError("Verificação de segurança falhou."); return; }
