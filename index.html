@@ -10,6 +10,31 @@
     <script>
       // Garante que o objeto process exista para compatibilidade com bibliotecas
       window.process = window.process || { env: {} };
+
+      // =========================================================
+      // MAGIC LINK FIX: O HashRouter do React intercepta o hash da
+      // URL, impedindo o SDK do Supabase de ler os tokens de auth.
+      // Este script converte os params do hash em query string e
+      // os salva no sessionStorage ANTES do React montar.
+      // =========================================================
+      (function() {
+        var hash = window.location.hash;
+        // Verifica se é um callback de autenticação do Supabase
+        if (hash && (hash.includes('access_token=') || hash.includes('error_code='))) {
+          // Remove o '#' inicial
+          var params = hash.substring(1);
+          // Salva os parâmetros originais para o SDK do Supabase processar
+          try {
+            sessionStorage.setItem('supabase_auth_callback_params', params);
+          } catch(e) {}
+          // Limpa o hash para evitar que o HashRouter o processe como rota
+          // mas mantém a URL base para que o app carregue na raiz
+          if (window.history && window.history.replaceState) {
+            window.history.replaceState(null, '', window.location.pathname + window.location.search + '#/');
+          }
+        }
+      })();
+
       
       tailwind.config = {
         darkMode: 'class',

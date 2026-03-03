@@ -749,8 +749,53 @@ const App = () => {
   const [showSuspendedModal, setShowSuspendedModal] = useState(false);
 
   useEffect(() => {
+    // Tenta processar tokens salvos pelo script do index.html (Magic Link Fix)
+    const magicLinkParams = sessionStorage.getItem('supabase_auth_callback_params');
+    if (magicLinkParams) {
+      sessionStorage.removeItem('supabase_auth_callback_params');
+      try {
+        const params = new URLSearchParams(magicLinkParams);
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+        if (accessToken && refreshToken) {
+          supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          }).then(({ data }) => {
+            if (data.user) {
+              db.getCurrentUser().then(u => {
+                if (u) { setUser(u); }
+              }).finally(() => setLoading(false));
+            } else {
+              db.getCurrentUser().then(setUser).finally(() => setLoading(false));
+            }
+          }).catch(() => {
+            db.getCurrentUser().then(setUser).finally(() => setLoading(false));
+          });
+          return;
+        }
+      } catch (e) { /* segue */ }
+    }
+
+    // Fluxo normal: verifica sessão existente
     db.getCurrentUser().then(setUser).finally(() => setLoading(false));
+
+    // Escuta mudanças de auth (ex: magic link processado pelo SDK)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user && !user) {
+        const currentUser = await db.getCurrentUser();
+        if (currentUser) {
+          setUser(currentUser);
+          setLoading(false);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
+
 
   useEffect(() => {
     if (user?.companyId) {
