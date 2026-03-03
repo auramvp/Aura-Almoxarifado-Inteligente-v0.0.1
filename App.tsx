@@ -749,52 +749,34 @@ const App = () => {
   const [showSuspendedModal, setShowSuspendedModal] = useState(false);
 
   useEffect(() => {
-    // Tenta processar tokens salvos pelo script do index.html (Magic Link Fix)
-    const magicLinkParams = sessionStorage.getItem('supabase_auth_callback_params');
-    if (magicLinkParams) {
-      sessionStorage.removeItem('supabase_auth_callback_params');
-      try {
-        const params = new URLSearchParams(magicLinkParams);
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-        if (accessToken && refreshToken) {
-          supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          }).then(({ data }) => {
-            if (data.user) {
-              db.getCurrentUser().then(u => {
-                if (u) { setUser(u); }
-              }).finally(() => setLoading(false));
-            } else {
-              db.getCurrentUser().then(setUser).finally(() => setLoading(false));
-            }
-          }).catch(() => {
-            db.getCurrentUser().then(setUser).finally(() => setLoading(false));
-          });
-          return;
-        }
-      } catch (e) { /* segue */ }
-    }
-
-    // Fluxo normal: verifica sessão existente
-    db.getCurrentUser().then(setUser).finally(() => setLoading(false));
-
-    // Escuta mudanças de auth (ex: magic link processado pelo SDK)
+    // Listener para mudanças de estado de autenticação
+    // Isso captura automaticamente o login via Magic Link:
+    // o SDK do Supabase com detectSessionInUrl:true + flowType:'implicit'
+    // lê os tokens do hash da URL ao inicializar e dispara SIGNED_IN aqui.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user && !user) {
+      if (event === 'SIGNED_IN' && session?.user) {
+        // Magic link ou qualquer outro login: buscar perfil e logar
         const currentUser = await db.getCurrentUser();
         if (currentUser) {
           setUser(currentUser);
-          setLoading(false);
         }
+        setLoading(false);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
+        setLoading(false);
+      } else if (event === 'INITIAL_SESSION') {
+        // Sessão existente ao carregar o app (usuário já logado)
+        if (session?.user) {
+          const currentUser = await db.getCurrentUser();
+          setUser(currentUser);
+        }
+        setLoading(false);
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
 
 
   useEffect(() => {

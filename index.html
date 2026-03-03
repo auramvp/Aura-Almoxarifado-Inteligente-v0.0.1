@@ -1,73 +1,88 @@
 <!DOCTYPE html>
 <html lang="pt-br">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Aura - Almoxarifado Inteligente</title>
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
-    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
-    <script>
-      // Garante que o objeto process exista para compatibilidade com bibliotecas
-      window.process = window.process || { env: {} };
 
-      // =========================================================
-      // MAGIC LINK FIX: O HashRouter do React intercepta o hash da
-      // URL, impedindo o SDK do Supabase de ler os tokens de auth.
-      // Este script converte os params do hash em query string e
-      // os salva no sessionStorage ANTES do React montar.
-      // =========================================================
-      (function() {
-        var hash = window.location.hash;
-        // Verifica se é um callback de autenticação do Supabase
-        if (hash && (hash.includes('access_token=') || hash.includes('error_code='))) {
-          // Remove o '#' inicial
-          var params = hash.substring(1);
-          // Salva os parâmetros originais para o SDK do Supabase processar
-          try {
-            sessionStorage.setItem('supabase_auth_callback_params', params);
-          } catch(e) {}
-          // Limpa o hash para evitar que o HashRouter o processe como rota
-          // mas mantém a URL base para que o app carregue na raiz
-          if (window.history && window.history.replaceState) {
-            window.history.replaceState(null, '', window.location.pathname + window.location.search + '#/');
-          }
-        }
-      })();
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aura - Almoxarifado Inteligente</title>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <script>
+    // Garante que o objeto process exista para compatibilidade com bibliotecas
+    window.process = window.process || { env: {} };
 
-      
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-            },
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
           },
         },
-      }
-    </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-      body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; }
-      ::-webkit-scrollbar { width: 8px; height: 8px; }
-      ::-webkit-scrollbar-track { background: #f1f1f1; }
-      ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
-      ::-webkit-scrollbar-thumb:hover { background: #555; }
-      
-      .dark ::-webkit-scrollbar-track { background: #0f172a; }
-      .dark ::-webkit-scrollbar-thumb { background: #334155; }
-      .dark ::-webkit-scrollbar-thumb:hover { background: #475569; }
+      },
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      padding: 0;
+    }
 
-      .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-      .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-      .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.2); border-radius: 20px; }
-      
-      #root { min-height: 100vh; display: flex; flex-direction: column; }
-    </style>
-    <script type="importmap">
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #888;
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
+
+    .dark ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+
+    .dark ::-webkit-scrollbar-thumb {
+      background: #334155;
+    }
+
+    .dark ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.2);
+      border-radius: 20px;
+    }
+
+    #root {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+  </style>
+  <script type="importmap">
     {
       "imports": {
         "react": "https://esm.sh/react@19.0.0",
@@ -88,8 +103,10 @@
     </script>
   <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-slate-50 text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100">
-    <div id="root"></div>
-    <script type="module" src="index.tsx"></script>
+
+<body class="bg-slate-50 text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100">
+  <div id="root"></div>
+  <script type="module" src="index.tsx"></script>
 </body>
+
 </html>
