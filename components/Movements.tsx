@@ -409,8 +409,9 @@ const Movements = ({ user }: any) => {
   };
 
   const handleRejectTransfer = async (transferId: string) => {
+    if (!user?.id) return;
     if (!confirm('Rejeitar esta transferência?')) return;
-    try { await db.rejectTransfer(transferId); await loadData(); }
+    try { await db.rejectTransfer(transferId, user.id); await loadData(); }
     catch (err: any) { alert(err.message || 'Erro ao rejeitar transferência'); }
   };
 

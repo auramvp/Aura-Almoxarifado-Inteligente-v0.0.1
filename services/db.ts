@@ -1494,70 +1494,20 @@ export const db = {
   },
 
   async confirmTransfer(transferId: string, confirmedBy: string): Promise<void> {
-    // Get the transfer details
-    const { data: transfer, error: fetchErr } = await supabase
-      .from('stock_transfers')
-      .select('*')
-      .eq('id', transferId)
-      .single();
-
-    if (fetchErr || !transfer) throw new Error('Transferência não encontrada');
-    if (transfer.status !== 'pending') throw new Error('Transferência já foi processada');
-
-    const items = transfer.items as { productId: string; description: string; quantity: number; pmed: number }[];
-    const toCompanyId = transfer.to_company_id as string;
-    const fromCompanyId = transfer.from_company_id as string;
-
-    // For each item: deduct from source via OUT movement, add to destination via IN movement
-    for (const item of items) {
-      const value = item.pmed * item.quantity;
-
-      // OUT from source
-      await supabase.from('stock_movements').insert({
-        product_id: item.productId,
-        company_id: fromCompanyId,
-        type: 'OUT',
-        quantity: item.quantity,
-        total_value: value,
-        movement_date: new Date().toISOString().split('T')[0],
-        month_ref: new Date().toISOString().substring(0, 7),
-        pmed_at_time: item.pmed,
-        origin_id: `TRANSFER_OUT_${transferId}`,
-        destination: `Transferência para unidade`,
-        created_by_user_id: confirmedBy
-      });
-
-      // IN to destination
-      await supabase.from('stock_movements').insert({
-        product_id: item.productId,
-        company_id: toCompanyId,
-        type: 'IN',
-        quantity: item.quantity,
-        total_value: value,
-        movement_date: new Date().toISOString().split('T')[0],
-        month_ref: new Date().toISOString().substring(0, 7),
-        pmed_at_time: item.pmed,
-        origin_id: `TRANSFER_IN_${transferId}`,
-        destination: `Recebida de transferência`,
-        created_by_user_id: confirmedBy
-      });
-    }
-
-    // Update transfer status
-    const { error: updateErr } = await supabase
-      .from('stock_transfers')
-      .update({ status: 'confirmed', confirmed_by: confirmedBy, confirmed_at: new Date().toISOString() })
-      .eq('id', transferId);
-
-    if (updateErr) throw updateErr;
+    const { error } = await supabase.rpc('process_stock_transfer', {
+      p_transfer_id: transferId,
+      p_user_id: confirmedBy,
+      p_action: 'confirm'
+    });
+    if (error) throw new Error('Erro ao confirmar transferência: ' + error.message);
   },
 
-  async rejectTransfer(transferId: string): Promise<void> {
-    const { error } = await supabase
-      .from('stock_transfers')
-      .update({ status: 'rejected', confirmed_at: new Date().toISOString() })
-      .eq('id', transferId);
-
-    if (error) throw error;
+  async rejectTransfer(transferId: string, rejectedBy: string): Promise<void> {
+    const { error } = await supabase.rpc('process_stock_transfer', {
+      p_transfer_id: transferId,
+      p_user_id: rejectedBy,
+      p_action: 'reject'
+    });
+    if (error) throw new Error('Erro ao rejeitar transferência: ' + error.message);
   }
 };
