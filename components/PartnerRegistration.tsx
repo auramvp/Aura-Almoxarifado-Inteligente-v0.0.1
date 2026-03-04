@@ -44,6 +44,9 @@ const PartnerRegistration: React.FC = () => {
                     name: partnerData.companyName
                 }
             );
+            // Fazer logout para não logar automaticamente o parceiro recém-cadastrado
+            // O parceiro vai entrar usando o Magic Link que foi enviado por email
+            await db.logout();
             setSuccess(true);
             setTimeout(() => navigate('/'), 3000);
         } catch (err: any) {
@@ -53,6 +56,7 @@ const PartnerRegistration: React.FC = () => {
             setLoading(false);
         }
     };
+
 
     if (success) {
         return (
