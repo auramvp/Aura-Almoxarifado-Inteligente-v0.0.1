@@ -289,54 +289,89 @@ export const db = {
   },
 
   async registerPartner(userData: { name: string, email: string, password?: string }, companyData: { cnpj: string, name: string }): Promise<User> {
-    // 1. Create Auth User (o signUp já loga automaticamente o usuário no Supabase)
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: userData.email,
-      password: userData.password || Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12),
-    });
+    console.log("Iniciando registerPartner para:", userData.email);
+    let finalAuthUser: any;
 
-    if (authError) throw authError;
-    if (!authData.user) throw new Error("Erro ao criar usuário de autenticação.");
+    // 1. Create or Identify Auth User
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: userData.email,
+        password: userData.password || Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12),
+      });
 
-    const newUserId = authData.user.id;
-
-    // 2. Check if Company already exists or Create Company
-    let company;
-
-    const { data: existingCompany } = await supabase
-      .from('companies')
-      .select('*')
-      .eq('cnpj', companyData.cnpj)
-      .maybeSingle();
-
-    if (existingCompany) {
-      company = existingCompany;
-    } else {
-      const { data: newCompany, error: compErr } = await supabase.from('companies').insert({
-        cnpj: companyData.cnpj,
-        name: companyData.name,
-        status: 'active',
-        sector_name: 'Geral',
-        sector_responsible: userData.name,
-        email: userData.email
-      }).select().single();
-
-      if (compErr) throw compErr;
-      company = newCompany;
+      if (authError) {
+        console.warn("Aviso no signUp de parceiro:", authError.message);
+        // Se o usuário já existe, tentamos prosseguir
+        if (authError.message.includes("User already registered") || authError.status === 422) {
+          const { data: { user: currentUser } } = await supabase.auth.getUser();
+          if (currentUser && currentUser.email === userData.email) {
+            finalAuthUser = currentUser;
+            console.log("Usuário já existente identificado via sessão.");
+          } else {
+            // Se não temos sessão, mas o erro diz que já existe, pode ser um convite refeito
+            // O Supabase não permite recuperar o User via API anon se ele já existe por questões de segurança.
+            // No entanto, se o signUp deu 422 e não temos sessão, lançamos o erro original
+            throw authError;
+          }
+        } else {
+          throw authError;
+        }
+      } else {
+        finalAuthUser = authData.user;
+        console.log("Novo usuário de auth criado com sucesso.");
+      }
+    } catch (err: any) {
+      console.error("Erro crítico no signUp de parceiro:", err);
+      // Fallback: verificar se já temos sessão ativa (pode acontecer em retentativas)
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (currentUser && currentUser.email === userData.email) {
+        finalAuthUser = currentUser;
+        console.log("Recuperado usuário da sessão após erro.");
+      } else {
+        throw err;
+      }
     }
 
-    // 3. Create Profile
-    const { data: user, error: userErr } = await supabase.from('profiles').insert({
+    if (!finalAuthUser) throw new Error("Não foi possível identificar ou criar o usuário de autenticação.");
+
+    const newUserId = finalAuthUser.id;
+    console.log("ID do usuário:", newUserId);
+
+    // 2. Upsert Company (CNPJ is unique)
+    console.log("Processando empresa (CNPJ):", companyData.cnpj);
+    const { data: company, error: compErr } = await supabase.from('companies').upsert({
+      cnpj: companyData.cnpj,
+      name: companyData.name,
+      status: 'active',
+      sector_name: 'Geral',
+      sector_responsible: userData.name,
+      email: userData.email
+    }, { onConflict: 'cnpj' }).select().single();
+
+    if (compErr) {
+      console.error("Erro no upsert da empresa:", compErr);
+      throw compErr;
+    }
+    console.log("Empresa processada ID:", company.id);
+
+    // 3. Upsert Profile
+    console.log("Processando perfil para usuário:", newUserId);
+    const { data: user, error: userErr } = await supabase.from('profiles').upsert({
       id: newUserId,
       name: userData.name,
       email: userData.email,
       role: UserRole.ALMOXARIFE,
       company_id: company.id
-    }).select().single();
+    }, { onConflict: 'id' }).select().single();
 
-    if (userErr) throw userErr;
+    if (userErr) {
+      console.error("Erro no upsert do perfil:", userErr);
+      throw userErr;
+    }
+    console.log("Perfil processado com sucesso.");
 
     // 4. Create Automatic Partners Subscription for Partners
+    console.log("Configurando plano Partners...");
     const { data: plan } = await supabase.from('plans').select('id').eq('name', 'Partners').single();
 
     if (plan) {
@@ -354,6 +389,7 @@ export const db = {
           .from('subscriptions')
           .update({ plan_id: plan.id, status: 'active', updated_at: new Date().toISOString() })
           .eq('id', existingSub.id);
+        console.log("Assinatura existente atualizada para Partners.");
       } else {
         await supabase.from('subscriptions').insert({
           company_id: company.id,
@@ -361,21 +397,31 @@ export const db = {
           status: 'active',
           start_date: new Date().toISOString().split('T')[0]
         });
+        console.log("Nova assinatura Partners criada.");
       }
 
       await supabase.from('companies').update({ plan_id: plan.id }).eq('id', company.id);
     }
 
     // 5. Send Magic Link for initial login
+    console.log("Enviando link de acesso por e-mail...");
     await this.sendMagicLink(userData.email);
 
     // 6. APENAS AGORA fazer signOut - após todas as operações de DB concluídas.
-    // Isso evita que o onAuthStateChange no App.tsx exiba o painel do parceiro.
-    await supabase.auth.signOut();
-    localStorage.removeItem('aura_user');
+    // Usamos try/catch para garantir que falha no signOut não impeça o retorno de sucesso.
+    try {
+      console.log("Realizando logout preventivo...");
+      await supabase.auth.signOut();
+      localStorage.removeItem('aura_user');
+      console.log("Logout concluído.");
+    } catch (logoutErr) {
+      console.warn("Falha silenciosa no logout final:", logoutErr);
+    }
 
+    console.log("Registro de parceiro finalizado com sucesso.");
     return { id: user.id, name: user.name, email: user.email, role: user.role as UserRole, createdAt: user.created_at, companyId: user.company_id } as User;
   },
+
 
 
   async checkDailyDigest() {
