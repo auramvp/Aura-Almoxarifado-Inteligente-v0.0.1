@@ -813,7 +813,11 @@ const App = () => {
     return () => clearInterval(interval);
   }, [user, company]);
 
-  if (loading) {
+  // Verificar se é a rota de registro de parceiro ANTES do loading
+  // para não bloquear usuários acessando o link de convite
+  const isPartnerRoute = window.location.hash.includes('/registro-parceiro');
+
+  if (loading && !isPartnerRoute) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
         <div className="flex flex-col items-center gap-4">
