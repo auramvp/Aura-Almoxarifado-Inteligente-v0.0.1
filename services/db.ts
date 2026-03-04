@@ -1072,7 +1072,7 @@ export const db = {
     const { data } = await supabase.from('stock_movements').select('*').eq('company_id', user.companyId).order('created_at', { ascending: false });
     return (data || []).map(m => ({
       id: m.id, companyId: m.company_id, movementDate: m.movement_date, monthRef: m.month_ref,
-      productId: m.product_id, supplierId: m.supplier_id, sectorId: m.sector_id,
+      productId: m.product_id, supplierId: m.supplier_id, supplierName: m.supplier_name, sectorId: m.sector_id,
       personName: m.person_name, type: m.type as MovementType,
       quantity: Number(m.quantity || 0), totalValue: Number(m.total_value || 0),
       destination: m.destination, invoiceNumber: m.invoice_number, invoiceDate: m.invoice_date,
@@ -1109,7 +1109,7 @@ export const db = {
     const movementDate = m.movementDate || new Date().toISOString().split('T')[0];
     const payload = {
       movement_date: movementDate, month_ref: movementDate.substring(0, 7),
-      product_id: m.productId, supplier_id: m.supplierId || null,
+      product_id: m.productId, supplier_id: m.supplierId || null, supplier_name: m.supplierName || null,
       sector_id: m.sectorId || null, person_name: m.personName || null,
       type: m.type, quantity: m.quantity, total_value: m.totalValue,
       destination: normalize(m.destination), invoice_number: m.invoiceNumber,

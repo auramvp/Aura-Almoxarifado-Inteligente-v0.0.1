@@ -89,9 +89,12 @@ const Movements = ({ user }: any) => {
     loadData();
   }, [activeTab]);
 
+  const [isRegisteredSupplier, setIsRegisteredSupplier] = useState(true);
+
   const [formData, setFormData] = useState({
     productId: '',
     supplierId: '',
+    supplierName: '',
     sectorId: '',
     personName: '',
     quantity: 1,
@@ -169,11 +172,13 @@ const Movements = ({ user }: any) => {
     setIsConfirming(false);
     setProductSearch('');
     setShowInvoice(false);
+    setIsRegisteredSupplier(true);
     setDisplayTotalValue(formatCurrency(0));
     setDisplayInvoiceValue(formatCurrency(0));
     setFormData({
       productId: '',
       supplierId: '',
+      supplierName: '',
       sectorId: '',
       personName: '',
       quantity: 1,
@@ -1105,12 +1110,43 @@ const Movements = ({ user }: any) => {
                     {
                       movementType === MovementType.IN && (
                         <div className="space-y-6 pt-4 border-t border-slate-100 dark:border-slate-800">
-                          <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Fornecedor</label>
-                            <select required className="w-full px-5 py-4 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold" value={formData.supplierId} onChange={e => setFormData({ ...formData, supplierId: e.target.value })}>
-                              <option value="">Selecione o Fornecedor...</option>
-                              {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                            </select>
+                          <div className="space-y-3">
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                              Comprou de algum fornecedor cadastrado?
+                            </label>
+
+                            <div className="flex bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl w-full max-w-[200px] border border-slate-200 dark:border-slate-700">
+                              <button
+                                type="button"
+                                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${isRegisteredSupplier ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+                                onClick={() => { setIsRegisteredSupplier(true); setFormData({ ...formData, supplierName: '' }); }}
+                              >
+                                Sim
+                              </button>
+                              <button
+                                type="button"
+                                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${!isRegisteredSupplier ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+                                onClick={() => { setIsRegisteredSupplier(false); setFormData({ ...formData, supplierId: '' }); }}
+                              >
+                                Não
+                              </button>
+                            </div>
+
+                            {isRegisteredSupplier ? (
+                              <select required className="w-full px-5 py-4 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold transition-all" value={formData.supplierId} onChange={e => setFormData({ ...formData, supplierId: e.target.value })}>
+                                <option value="">Selecione o Fornecedor...</option>
+                                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                              </select>
+                            ) : (
+                              <input
+                                type="text"
+                                required
+                                placeholder="Informe onde comprou..."
+                                className="w-full px-5 py-4 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold transition-all placeholder:text-slate-400"
+                                value={formData.supplierName}
+                                onChange={e => setFormData({ ...formData, supplierName: e.target.value })}
+                              />
+                            )}
                           </div>
 
                           <div className="space-y-4">
@@ -1272,7 +1308,7 @@ const Movements = ({ user }: any) => {
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Fornecedor</p>
                       <p className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
                         <Building2 size={14} className="text-slate-400" />
-                        {suppliers.find(s => s.id === selectedMovement.supplierId)?.name || '-'}
+                        {selectedMovement.supplierId ? (suppliers.find(s => s.id === selectedMovement.supplierId)?.name || '-') : (selectedMovement.supplierName || '-')}
                       </p>
                     </div>
 

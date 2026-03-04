@@ -239,6 +239,7 @@ export interface StockMovement {
   monthRef: string; // YYYY-MM
   productId: string;
   supplierId?: string;
+  supplierName?: string;
   sectorId?: string;
   personName?: string;
   originId: string;
