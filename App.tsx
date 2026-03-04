@@ -121,7 +121,7 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const TURNSTILE_SITE_KEY = "0x4AAAAAACaSmlBs51Op_RRa";
 
-  const [formData, setFormData] = useState({ name: '', email: '', password: '', accessCode: '', magicEmail: '' });
+  const [formData, setFormData] = useState({ name: '', email: '', password: '', accessCode: '' });
   const [registerData, setRegisterData] = useState({ name: '', email: '', password: '', confirmPassword: '', companyName: '', cnpj: '', address: '', phone: '', contactEmail: '' });
 
   const [emailFromUrl, setEmailFromUrl] = useState(false);
@@ -311,18 +311,6 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
     }
   };
 
-  const handleMagicLinkLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!turnstileToken) { setError("Por favor, complete a verificação de segurança."); return; }
-    setLoading(true); setError(null); setSuccessMessage(null);
-    try {
-      await db.sendMagicLink(formData.magicEmail, turnstileToken);
-      setSuccessMessage(`Link enviado para ${formData.magicEmail}! Verifique sua caixa de entrada.`);
-      setFormData(prev => ({ ...prev, magicEmail: '' }));
-      if (window.turnstile) window.turnstile.reset();
-      setTurnstileToken(null);
-    } catch (err: any) { setError("Erro ao enviar link."); } finally { setLoading(false); }
-  };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -595,32 +583,59 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
               {error && <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-bold border border-red-100 flex items-center gap-2 animate-in slide-in-from-top-2 duration-300"><AlertCircle size={14} /> {error}</div>}
               {successMessage && <div className="mb-4 p-3 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-bold border border-emerald-100 flex items-center gap-2 animate-in slide-in-from-top-2 duration-300"><CheckCircle size={14} /> {successMessage}</div>}
 
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Login Sem Senha</label>
-                  <div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="email" placeholder="seu@email.com" className={inputClass} value={formData.magicEmail} onChange={e => setFormData({ ...formData, magicEmail: e.target.value })} /></div>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-3">
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input required type="email" placeholder="seu@email.com" className={inputClass} value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
+                  </div>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input
+                      required
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Sua senha"
+                      className={inputClass}
+                      value={formData.password}
+                      onChange={e => setFormData({ ...formData, password: e.target.value })}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-600 transition-colors"
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
+
+                <div className="flex justify-between items-center px-1">
+                  <button type="button" onClick={() => setAuthMode('forgotPassword')} className="text-[10px] font-bold text-slate-400 hover:text-blue-600 transition-colors uppercase tracking-widest">Esqueci minha senha</button>
+                  <button type="button" onClick={() => setAuthMode('register')} className="text-[10px] font-bold text-blue-600 hover:underline uppercase tracking-widest">Criar conta</button>
+                </div>
+
                 <TurnstileWidget
                   siteKey={TURNSTILE_SITE_KEY}
                   onVerify={setTurnstileToken}
                   onExpire={() => setTurnstileToken(null)}
                 />
+
                 <button
-                  onClick={handleMagicLinkLogin}
-                  disabled={loading || !formData.magicEmail}
+                  type="submit"
+                  disabled={loading}
                   className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg shadow-blue-500/20 active:scale-95 transition-all text-center flex items-center justify-center min-h-[44px]"
                 >
                   {loading ? (
                     <div className="flex items-center gap-2">
                       <Loader2 className="animate-spin" size={14} />
-                      <span>{turnstileToken ? 'Enviando...' : 'Verificando...'}</span>
+                      <span>{turnstileToken ? 'Entrando...' : 'Verificando...'}</span>
                     </div>
-                  ) : 'Link Mágico'}
+                  ) : 'Entrar'}
                 </button>
-              </div>
+              </form>
 
               <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 text-center">
-                <button onClick={() => window.open('https://auraalmoxarifado.com.br', '_blank')} className="text-slate-400 hover:text-blue-600 text-[9px] font-black uppercase tracking-widest transition-colors">Assinar</button>
+                <button onClick={() => window.open('https://auraalmoxarifado.com.br', '_blank')} className="text-slate-400 hover:text-blue-600 text-[9px] font-black uppercase tracking-widest transition-colors">Ainda não tem acesso? Assinar Agora</button>
               </div>
             </div>
           )}
