@@ -1454,5 +1454,110 @@ export const db = {
       userId: l.user_id,
       createdAt: l.created_at
     })) as AuditLog[];
+  },
+
+  // ─── Transfers ───────────────────────────────────────────────
+
+  async createTransfer(data: {
+    fromCompanyId: string;
+    toCompanyId: string;
+    items: { productId: string; description: string; quantity: number; pmed: number }[];
+    reason: string;
+    createdBy: string;
+  }): Promise<{ id: string }> {
+    const { data: transfer, error } = await supabase
+      .from('stock_transfers')
+      .insert({
+        from_company_id: data.fromCompanyId,
+        to_company_id: data.toCompanyId,
+        items: data.items,
+        reason: data.reason,
+        created_by: data.createdBy,
+        status: 'pending'
+      })
+      .select('id')
+      .single();
+
+    if (error) throw error;
+    return { id: transfer.id };
+  },
+
+  async getTransfers(companyId: string): Promise<any[]> {
+    const { data, error } = await supabase
+      .from('stock_transfers')
+      .select('*')
+      .or(`from_company_id.eq.${companyId},to_company_id.eq.${companyId}`)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  async confirmTransfer(transferId: string, confirmedBy: string): Promise<void> {
+    // Get the transfer details
+    const { data: transfer, error: fetchErr } = await supabase
+      .from('stock_transfers')
+      .select('*')
+      .eq('id', transferId)
+      .single();
+
+    if (fetchErr || !transfer) throw new Error('Transferência não encontrada');
+    if (transfer.status !== 'pending') throw new Error('Transferência já foi processada');
+
+    const items = transfer.items as { productId: string; description: string; quantity: number; pmed: number }[];
+    const toCompanyId = transfer.to_company_id as string;
+    const fromCompanyId = transfer.from_company_id as string;
+
+    // For each item: deduct from source via OUT movement, add to destination via IN movement
+    for (const item of items) {
+      const value = item.pmed * item.quantity;
+
+      // OUT from source
+      await supabase.from('stock_movements').insert({
+        product_id: item.productId,
+        company_id: fromCompanyId,
+        type: 'OUT',
+        quantity: item.quantity,
+        total_value: value,
+        movement_date: new Date().toISOString().split('T')[0],
+        month_ref: new Date().toISOString().substring(0, 7),
+        pmed_at_time: item.pmed,
+        origin_id: `TRANSFER_OUT_${transferId}`,
+        destination: `Transferência para unidade`,
+        created_by_user_id: confirmedBy
+      });
+
+      // IN to destination
+      await supabase.from('stock_movements').insert({
+        product_id: item.productId,
+        company_id: toCompanyId,
+        type: 'IN',
+        quantity: item.quantity,
+        total_value: value,
+        movement_date: new Date().toISOString().split('T')[0],
+        month_ref: new Date().toISOString().substring(0, 7),
+        pmed_at_time: item.pmed,
+        origin_id: `TRANSFER_IN_${transferId}`,
+        destination: `Recebida de transferência`,
+        created_by_user_id: confirmedBy
+      });
+    }
+
+    // Update transfer status
+    const { error: updateErr } = await supabase
+      .from('stock_transfers')
+      .update({ status: 'confirmed', confirmed_by: confirmedBy, confirmed_at: new Date().toISOString() })
+      .eq('id', transferId);
+
+    if (updateErr) throw updateErr;
+  },
+
+  async rejectTransfer(transferId: string): Promise<void> {
+    const { error } = await supabase
+      .from('stock_transfers')
+      .update({ status: 'rejected', confirmed_at: new Date().toISOString() })
+      .eq('id', transferId);
+
+    if (error) throw error;
   }
 };

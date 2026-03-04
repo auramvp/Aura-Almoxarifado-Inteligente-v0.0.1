@@ -498,5 +498,64 @@ export const EmailService = {
 
     const html = generateEmailTemplate('Convite de Unidade', content, accentColor);
     return this.sendEmail({ to: email, subject, html });
+  },
+
+  async sendTransferNotification(
+    toEmail: string,
+    fromCompanyName: string,
+    toCompanyName: string,
+    items: { description: string; quantity: number }[],
+    reason: string,
+    transferId: string
+  ): Promise<void> {
+    const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.auraalmoxarifado.com.br';
+    const subject = `📦 Transferência de Estoque Recebida — ${fromCompanyName}`;
+    const accentColor = '#7c3aed';
+
+    const itemsHtml = items.map(item => `
+      <tr>
+        <td style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb; font-size: 14px; color: #1f2937; font-weight: 600;">${item.description}</td>
+        <td style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb; font-size: 14px; color: #7c3aed; font-weight: 800; text-align: right;">${item.quantity}</td>
+      </tr>
+    `).join('');
+
+    const content = `
+      <p style="font-size: 16px; font-weight: 700; color: #1f2937; margin: 0 0 8px;">
+        Olá, equipe de <strong>${toCompanyName}</strong>!
+      </p>
+      <p style="font-size: 14px; color: #6b7280; line-height: 1.6; margin: 0 0 24px;">
+        A unidade <strong>${fromCompanyName}</strong> enviou uma transferência de estoque para sua unidade.
+        Acesse o sistema para confirmar ou rejeitar os itens recebidos.
+      </p>
+
+      ${reason ? `
+      <div style="background-color: #f5f3ff; border-left: 4px solid #7c3aed; padding: 16px; border-radius: 0 8px 8px 0; margin-bottom: 24px;">
+        <p style="margin: 0; font-size: 11px; text-transform: uppercase; color: #7c3aed; font-weight: 700; letter-spacing: 0.5px;">Motivo da Transferência</p>
+        <p style="margin: 4px 0 0; font-size: 14px; color: #1f2937;">${reason}</p>
+      </div>
+      ` : ''}
+
+      <table style="width: 100%; border-collapse: collapse; background-color: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb; margin-bottom: 24px;">
+        <thead>
+          <tr style="background-color: #f9fafb;">
+            <th style="padding: 12px 16px; text-align: left; font-size: 11px; text-transform: uppercase; color: #6b7280; letter-spacing: 0.5px; font-weight: 700;">Item</th>
+            <th style="padding: 12px 16px; text-align: right; font-size: 11px; text-transform: uppercase; color: #6b7280; letter-spacing: 0.5px; font-weight: 700;">Qtd</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsHtml}
+        </tbody>
+      </table>
+
+      <div style="text-align: center; margin: 32px 0;">
+        <a href="${appUrl}/#/movimentacoes" style="background-color: #7c3aed; color: #ffffff; padding: 16px 32px; border-radius: 12px; font-weight: 800; text-decoration: none; display: inline-block; text-transform: uppercase; font-size: 14px; letter-spacing: 1px; box-shadow: 0 4px 6px -1px rgba(124, 58, 237, 0.3);">
+          Confirmar Recebimento
+        </a>
+      </div>
+    `;
+
+    const html = generateEmailTemplate('Transferência de Estoque Recebida', content, accentColor);
+    return this.sendEmail({ to: toEmail, subject, html });
   }
 };
+

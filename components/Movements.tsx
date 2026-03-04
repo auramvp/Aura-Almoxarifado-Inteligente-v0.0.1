@@ -1,13 +1,14 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../services/db';
-import { MovementType, StockMovement, Category, Product, Supplier, Sector, ProductType, ExitType, ReturnStatus } from '../types';
+import { EmailService } from '../services/emailService';
+import { MovementType, StockMovement, Category, Product, Supplier, Sector, ProductType, ExitType, ReturnStatus, Company } from '../types';
 import {
   ArrowUpCircle, ArrowDownCircle, Filter, X, Search, Tag,
   Package, Truck, FilterX, Hash, Navigation, DollarSign,
   Calendar, User as UserIcon, Plus, CheckCircle2, ChevronLeft,
   Loader2, CreditCard, Receipt, FileText, AlertCircle, Trash2,
   Download, RotateCcw, PackageCheck, BarChart3, Eye, Upload,
-  Paperclip, Building2, Users
+  Paperclip, Building2, Users, ArrowRightLeft, Clock, Check, XCircle
 } from 'lucide-react';
 import Sectors from './Sectors';
 import AnalysisDashboard from './AnalysisDashboard';
@@ -22,8 +23,22 @@ const Movements = ({ user }: any) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
-  const [activeTab, setActiveTab] = useState<'movements' | 'invoices'>('movements');
+  const [activeTab, setActiveTab] = useState<'movements' | 'invoices' | 'transfers'>('movements');
   const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
+
+  // Transfer state
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [transferStep, setTransferStep] = useState<1 | 2 | 3>(1);
+  const [transferItems, setTransferItems] = useState<{ productId: string; description: string; cod: string; quantity: number; pmed: number }[]>([]);
+  const [transferDestCompanyId, setTransferDestCompanyId] = useState('');
+  const [transferReason, setTransferReason] = useState('');
+  const [siblingCompanies, setSiblingCompanies] = useState<Company[]>([]);
+  const [transfers, setTransfers] = useState<any[]>([]);
+  const [isSavingTransfer, setIsSavingTransfer] = useState(false);
+  const [transferProductSearch, setTransferProductSearch] = useState('');
+  const [transferProductListOpen, setTransferProductListOpen] = useState(false);
+  const [selectedTransferProduct, setSelectedTransferProduct] = useState<Product | null>(null);
+  const [transferItemQty, setTransferItemQty] = useState(1);
 
   const [movementType, setMovementType] = useState<MovementType>(MovementType.IN);
   const [searchTerm, setSearchTerm] = useState('');
@@ -54,6 +69,20 @@ const Movements = ({ user }: any) => {
     setCategories(cs);
     setSuppliers(ss);
     setSectors(sec);
+
+    if (user?.companyId) {
+      const company = await db.getCompanyById(user.companyId);
+      const rootId = company?.parentId || user.companyId;
+      const warehouses = await db.getCompanyWarehouses(rootId);
+      const siblings = warehouses.filter((w: Company) => w.id !== user.companyId);
+      if (company?.parentId) {
+        const root = await db.getCompanyById(rootId);
+        if (root && root.id !== user.companyId) siblings.unshift(root);
+      }
+      setSiblingCompanies(siblings);
+      const ts = await db.getTransfers(user.companyId);
+      setTransfers(ts);
+    }
   };
 
   useEffect(() => {
@@ -316,6 +345,70 @@ const Movements = ({ user }: any) => {
     }
   };
 
+  const handleOpenTransferModal = () => {
+    setTransferStep(1);
+    setTransferItems([]);
+    setTransferDestCompanyId('');
+    setTransferReason('');
+    setTransferProductSearch('');
+    setSelectedTransferProduct(null);
+    setTransferItemQty(1);
+    setIsTransferModalOpen(true);
+  };
+
+  const handleAddTransferItem = () => {
+    if (!selectedTransferProduct) return;
+    setTransferItems(prev => {
+      const exists = prev.find(i => i.productId === selectedTransferProduct.id);
+      if (exists) return prev.map(i => i.productId === selectedTransferProduct.id ? { ...i, quantity: i.quantity + transferItemQty } : i);
+      return [...prev, { productId: selectedTransferProduct.id, description: selectedTransferProduct.description, cod: selectedTransferProduct.cod, quantity: transferItemQty, pmed: selectedTransferProduct.pmed }];
+    });
+    setSelectedTransferProduct(null);
+    setTransferProductSearch('');
+    setTransferItemQty(1);
+  };
+
+  const handleSendTransfer = async () => {
+    if (!user?.companyId || !user?.id) return;
+    setIsSavingTransfer(true);
+    try {
+      const fromCompany = await db.getCompanyById(user.companyId);
+      const toCompany = await db.getCompanyById(transferDestCompanyId);
+      if (!toCompany) throw new Error('Unidade de destino não encontrada');
+      const { id: transferId } = await db.createTransfer({
+        fromCompanyId: user.companyId,
+        toCompanyId: transferDestCompanyId,
+        items: transferItems,
+        reason: transferReason,
+        createdBy: user.id
+      });
+      const toEmail = toCompany.sectorEmail || toCompany.email;
+      if (toEmail) {
+        try {
+          await EmailService.sendTransferNotification(toEmail, fromCompany?.name || 'Unidade', toCompany.name, transferItems, transferReason, transferId);
+        } catch (emailErr) { console.warn('Falha ao enviar e-mail de transferência:', emailErr); }
+      }
+      await loadData();
+      setIsTransferModalOpen(false);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao criar transferência');
+    } finally {
+      setIsSavingTransfer(false);
+    }
+  };
+
+  const handleConfirmTransfer = async (transferId: string) => {
+    if (!user?.id) return;
+    try { await db.confirmTransfer(transferId, user.id); await loadData(); }
+    catch (err: any) { alert(err.message || 'Erro ao confirmar transferência'); }
+  };
+
+  const handleRejectTransfer = async (transferId: string) => {
+    if (!confirm('Rejeitar esta transferência?')) return;
+    try { await db.rejectTransfer(transferId); await loadData(); }
+    catch (err: any) { alert(err.message || 'Erro ao rejeitar transferência'); }
+  };
+
   const modalTitle = isConfirming
     ? 'Conferir Lançamento'
     : (movementType === MovementType.IN ? 'Nova Entrada' : 'Nova Saída');
@@ -331,41 +424,50 @@ const Movements = ({ user }: any) => {
           </h2>
           <p className="text-slate-500 dark:text-slate-400 font-medium">Controle de entradas, saídas e transferências</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setIsAnalysisOpen(!isAnalysisOpen)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition font-bold border shadow-sm ${isAnalysisOpen ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'}`}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg transition font-bold border shadow-sm text-xs ${isAnalysisOpen ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'}`}
           >
-            <BarChart3 size={18} /> {isAnalysisOpen ? 'Visualização em Lista' : 'Análise'}
+            <BarChart3 size={15} /> Análise
           </button>
 
           {!isAnalysisOpen && (
             <button
               onClick={() => setActiveTab(activeTab === 'invoices' ? 'movements' : 'invoices')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition font-bold border shadow-sm ${activeTab === 'invoices' ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'}`}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg transition font-bold border shadow-sm text-xs ${activeTab === 'invoices' ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'}`}
             >
-              <FileText size={18} /> {activeTab === 'invoices' ? 'Movimentações' : 'Notas Fiscais'}
+              <FileText size={15} /> Notas Fiscais
+            </button>
+          )}
+
+          {!isAnalysisOpen && (
+            <button
+              onClick={() => setActiveTab(activeTab === 'transfers' ? 'movements' : 'transfers')}
+              className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg transition font-bold border shadow-sm text-xs ${activeTab === 'transfers' ? 'bg-violet-600 text-white border-violet-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'}`}
+            >
+              <ArrowRightLeft size={15} /> Transferências
+              {transfers.filter((t: any) => t.to_company_id === user?.companyId && t.status === 'pending').length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                  {transfers.filter((t: any) => t.to_company_id === user?.companyId && t.status === 'pending').length}
+                </span>
+              )}
             </button>
           )}
 
           {canEdit && (
-            <div className="flex items-center gap-2">
-              <button onClick={() => handleOpenModal(MovementType.IN)} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg transition font-bold shadow-lg shadow-emerald-600/20 active:scale-95">
-                <Plus size={18} /> Entrada
+            <div className="flex items-center gap-1.5">
+              <button onClick={() => handleOpenModal(MovementType.IN)} className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg transition font-bold shadow-lg shadow-emerald-600/20 active:scale-95 text-xs">
+                <Plus size={15} /> Entrada
               </button>
-              <button
-                onClick={() => handleOpenModal(MovementType.OUT)}
-                disabled={!canEdit}
-                className="flex items-center gap-2 px-6 py-3 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition font-black text-xs uppercase tracking-widest shadow-lg shadow-amber-500/20 disabled:opacity-50 disabled:grayscale"
-              >
-                <ArrowDownCircle size={18} /> Saída
+              <button onClick={() => handleOpenModal(MovementType.OUT)} disabled={!canEdit} className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition font-bold text-xs shadow-lg shadow-amber-500/20 disabled:opacity-50">
+                <ArrowDownCircle size={15} /> Saída
               </button>
-              <button
-                onClick={() => setIsReturnModalOpen(true)}
-                disabled={!canEdit}
-                className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:grayscale"
-              >
-                <RotateCcw size={18} /> Devolução
+              <button onClick={() => setIsReturnModalOpen(true)} disabled={!canEdit} className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-bold text-xs shadow-lg shadow-indigo-500/20 disabled:opacity-50">
+                <RotateCcw size={15} /> Devolução
+              </button>
+              <button onClick={handleOpenTransferModal} disabled={!canEdit} className="flex items-center gap-1.5 px-3 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition font-bold text-xs shadow-lg shadow-violet-500/20 disabled:opacity-50">
+                <ArrowRightLeft size={15} /> Transferir
               </button>
             </div>
           )}
@@ -594,8 +696,229 @@ const Movements = ({ user }: any) => {
           </div>
         </div>
       )}
+
+      {/* Transfers Tab */}
+      {!isAnalysisOpen && activeTab === 'transfers' && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          {transfers.filter((t: any) => t.to_company_id === user?.companyId && t.status === 'pending').length > 0 && (
+            <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-2xl overflow-hidden">
+              <div className="px-6 py-4 border-b border-amber-200 flex items-center gap-2">
+                <Clock size={16} className="text-amber-600" />
+                <h3 className="text-sm font-black uppercase tracking-widest text-amber-700 dark:text-amber-400">Pendentes de Confirmação</h3>
+              </div>
+              <div className="divide-y divide-amber-100 dark:divide-amber-900/20">
+                {transfers.filter((t: any) => t.to_company_id === user?.companyId && t.status === 'pending').map((t: any) => (
+                  <div key={t.id} className="p-6 flex flex-col gap-3">
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                      <div>
+                        <p className="text-xs font-black text-slate-400 uppercase mb-1">Recebida de</p>
+                        <p className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><Building2 size={14} className="text-violet-500" /> {siblingCompanies.find((s: any) => s.id === t.from_company_id)?.name || 'Outra Unidade'}</p>
+                        <p className="text-xs text-slate-400 mt-1">{new Date(t.created_at).toLocaleDateString('pt-BR')}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleConfirmTransfer(t.id)} className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-xs font-black rounded-xl hover:bg-emerald-700 transition shadow-md">
+                          <Check size={14} /> Confirmar
+                        </button>
+                        <button onClick={() => handleRejectTransfer(t.id)} className="flex items-center gap-1.5 px-4 py-2 bg-red-100 dark:bg-red-900/30 text-red-600 text-xs font-black rounded-xl hover:bg-red-200 transition">
+                          <XCircle size={14} /> Rejeitar
+                        </button>
+                      </div>
+                    </div>
+                    {t.reason && <div className="bg-amber-100/60 dark:bg-amber-900/20 rounded-xl px-4 py-2 text-sm text-amber-900 dark:text-amber-200"><span className="font-black">Motivo:</span> {t.reason}</div>}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {(t.items as any[]).map((item: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between bg-white dark:bg-slate-900 rounded-xl px-4 py-3 border border-slate-200 dark:border-slate-700">
+                          <div className="flex items-center gap-2">
+                            <Package size={13} className="text-violet-500 shrink-0" />
+                            <div>
+                              <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{item.description}</p>
+                              <p className="text-[10px] font-mono text-slate-400">{item.cod}</p>
+                            </div>
+                          </div>
+                          <span className="text-violet-600 font-black text-xl ml-4">{item.quantity}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="px-6 py-4 border-b dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                <ArrowRightLeft size={16} className="text-violet-600" /> Histórico de Transferências
+              </h3>
+            </div>
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {transfers.length === 0 && <div className="py-12 text-center text-slate-400 italic">Nenhuma transferência registrada.</div>}
+              {transfers.map((t: any) => {
+                const isReceived = t.to_company_id === user?.companyId;
+                const otherId = isReceived ? t.from_company_id : t.to_company_id;
+                const other = siblingCompanies.find((s: any) => s.id === otherId);
+                const stMap: any = { pending: { label: 'Pendente', cls: 'bg-amber-100 text-amber-700' }, confirmed: { label: 'Confirmado', cls: 'bg-emerald-100 text-emerald-700' }, rejected: { label: 'Rejeitado', cls: 'bg-red-100 text-red-700' } };
+                const st = stMap[t.status] || stMap.pending;
+                return (
+                  <div key={t.id} className="p-6">
+                    <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-xl ${isReceived ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-600' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-600'}`}><ArrowRightLeft size={14} /></div>
+                        <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase">{isReceived ? 'Recebida de' : 'Enviada para'}</p>
+                          <p className="text-sm font-black text-slate-800 dark:text-slate-100">{other?.name || 'Outra Unidade'}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full ${st.cls}`}>{st.label}</span>
+                        <p className="text-xs text-slate-400">{new Date(t.created_at).toLocaleDateString('pt-BR')}</p>
+                      </div>
+                    </div>
+                    {t.reason && <p className="text-xs text-slate-500 italic mb-3">"{t.reason}"</p>}
+                    <div className="flex flex-wrap gap-2">
+                      {(t.items as any[]).map((item: any, i: number) => (
+                        <span key={i} className="text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3 py-1.5 rounded-xl">
+                          {item.description} <span className="text-violet-600 ml-1">×{item.quantity}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Modal */}
+      {isTransferModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-[28px] shadow-2xl w-full max-w-2xl border dark:border-slate-800 animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+            <div className="shrink-0 px-8 py-6 border-b dark:border-slate-800 flex items-center justify-between bg-violet-600 text-white rounded-t-[28px]">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Passo {transferStep} de 3</p>
+                <h3 className="text-xl font-black uppercase tracking-widest">
+                  {transferStep === 1 ? 'Destino e Motivo' : transferStep === 2 ? 'Adicionar Itens' : 'Confirmar Transferência'}
+                </h3>
+              </div>
+              <button onClick={() => setIsTransferModalOpen(false)} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition"><X size={20} /></button>
+            </div>
+            <div className="shrink-0 px-8 pt-4 flex items-center gap-2">
+              {[1, 2, 3].map(s => <div key={s} className={`flex-1 h-1.5 rounded-full transition-all ${s <= transferStep ? 'bg-violet-600' : 'bg-slate-200 dark:bg-slate-700'}`} />)}
+            </div>
+            <div className="flex-1 overflow-y-auto p-8 space-y-5 custom-scrollbar">
+              {transferStep === 1 && (
+                <>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Unidade de Destino</label>
+                    {siblingCompanies.length === 0
+                      ? <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 rounded-2xl p-4 text-sm text-amber-700 font-bold">Nenhuma unidade/filial encontrada. Cadastre em Configurações → Almoxarifados.</div>
+                      : <div className="grid grid-cols-1 gap-2">{siblingCompanies.map((c: Company) => (
+                        <button key={c.id} type="button" onClick={() => setTransferDestCompanyId(c.id)}
+                          className={`flex items-center gap-3 p-4 rounded-2xl border-2 text-left transition ${transferDestCompanyId === c.id ? 'border-violet-600 bg-violet-50 dark:bg-violet-900/20' : 'border-slate-200 dark:border-slate-700 hover:border-violet-300'}`}
+                        >
+                          <div className={`p-2 rounded-xl ${transferDestCompanyId === c.id ? 'bg-violet-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}><Building2 size={18} /></div>
+                          <div className="flex-1"><p className="font-black text-slate-800 dark:text-slate-100">{c.name}</p><p className="text-xs text-slate-400">{c.email || c.sectorEmail}</p></div>
+                          {transferDestCompanyId === c.id && <CheckCircle2 className="text-violet-600" size={20} />}
+                        </button>
+                      ))}</div>
+                    }
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Motivo (Opcional)</label>
+                    <textarea rows={3} placeholder="Descreva o motivo..." className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-violet-500 resize-none font-medium text-slate-900 dark:text-slate-100" value={transferReason} onChange={e => setTransferReason(e.target.value)} />
+                  </div>
+                </>
+              )}
+
+              {transferStep === 2 && (
+                <>
+                  <div className="relative">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Buscar Produto</label>
+                    <div className="relative">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                      <input type="text" placeholder="Nome ou código..." className="w-full pl-11 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-violet-500 font-bold text-slate-900 dark:text-slate-100"
+                        value={transferProductSearch} onChange={e => { setTransferProductSearch(e.target.value); setTransferProductListOpen(true); }} onFocus={() => setTransferProductListOpen(true)} />
+                      {selectedTransferProduct && <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 text-violet-500" size={17} />}
+                    </div>
+                    {transferProductListOpen && transferProductSearch && (
+                      <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-800 rounded-xl shadow-xl border dark:border-slate-700 max-h-52 overflow-y-auto">
+                        {products.filter(p => p.description.toLowerCase().includes(transferProductSearch.toLowerCase()) || p.cod.toLowerCase().includes(transferProductSearch.toLowerCase())).slice(0, 10).map(p => (
+                          <button key={p.id} type="button" onClick={() => { setSelectedTransferProduct(p); setTransferProductSearch(`${p.cod} – ${p.description}`); setTransferProductListOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition border-b dark:border-slate-700/50 last:border-0">
+                            <p className="font-bold text-sm text-slate-800 dark:text-slate-200">{p.description}</p><p className="text-xs text-slate-400 font-mono">{p.cod}</p>
+                          </button>
+                        ))}
+                        {products.filter(p => p.description.toLowerCase().includes(transferProductSearch.toLowerCase()) || p.cod.toLowerCase().includes(transferProductSearch.toLowerCase())).length === 0 && <p className="px-4 py-3 text-sm text-slate-400 italic">Nenhum produto encontrado.</p>}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-end gap-3">
+                    <div className="flex-1">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Quantidade</label>
+                      <input type="number" min="1" className="w-full px-5 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-violet-500 font-black text-xl text-slate-900 dark:text-slate-100" value={transferItemQty} onChange={e => setTransferItemQty(Math.max(1, Number(e.target.value)))} />
+                    </div>
+                    <button type="button" onClick={handleAddTransferItem} disabled={!selectedTransferProduct} className="px-5 py-3 bg-violet-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-violet-700 transition disabled:opacity-40 flex items-center gap-2 whitespace-nowrap shadow-lg shadow-violet-500/20">
+                      <Plus size={16} /> Adicionar
+                    </button>
+                  </div>
+                  {transferItems.length > 0 ? (
+                    <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl divide-y divide-slate-200 dark:divide-slate-700 border border-slate-200 dark:border-slate-700 overflow-hidden">
+                      {transferItems.map((item, i) => (
+                        <div key={i} className="flex items-center justify-between px-5 py-3">
+                          <div><p className="font-bold text-sm text-slate-800 dark:text-slate-100">{item.description}</p><p className="text-[10px] font-mono text-slate-400">{item.cod}</p></div>
+                          <div className="flex items-center gap-3">
+                            <span className="font-black text-violet-600 text-xl">{item.quantity}</span>
+                            <button type="button" onClick={() => setTransferItems(prev => prev.filter((_, idx) => idx !== i))} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition"><X size={14} /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <div className="text-center py-8 text-slate-400 italic text-sm">Adicione pelo menos um item para continuar.</div>}
+                </>
+              )}
+
+              {transferStep === 3 && (
+                <div className="space-y-4">
+                  <div className="bg-violet-50 dark:bg-violet-900/10 border border-violet-200 dark:border-violet-800 rounded-2xl p-5">
+                    <p className="text-[10px] font-black text-violet-500 uppercase tracking-widest mb-1">Destino</p>
+                    <p className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center gap-2"><Building2 size={18} className="text-violet-600" />{siblingCompanies.find((c: Company) => c.id === transferDestCompanyId)?.name}</p>
+                    {transferReason && <p className="mt-2 text-sm text-slate-500 italic">"{transferReason}"</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{transferItems.length} {transferItems.length === 1 ? 'Item' : 'Itens'}</p>
+                    {transferItems.map((item, i) => (
+                      <div key={i} className="flex items-center justify-between bg-white dark:bg-slate-800 px-5 py-3 rounded-2xl border border-slate-200 dark:border-slate-700">
+                        <div><p className="font-bold text-slate-800 dark:text-slate-100">{item.description}</p><p className="text-[10px] font-mono text-slate-400">{item.cod}</p></div>
+                        <span className="text-violet-600 font-black text-2xl">{item.quantity}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 flex items-start gap-3">
+                    <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">Um e-mail será enviado à unidade de destino. O estoque será ajustado somente após a confirmação.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="shrink-0 p-6 border-t dark:border-slate-800 flex gap-3">
+              {transferStep > 1 && <button onClick={() => setTransferStep(prev => (prev - 1) as 1 | 2 | 3)} className="flex items-center gap-2 px-5 py-3.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition"><ChevronLeft size={16} /> Voltar</button>}
+              {transferStep < 3 ? (
+                <button onClick={() => { if (transferStep === 1 && !transferDestCompanyId) { alert('Selecione a unidade de destino.'); return; } if (transferStep === 2 && transferItems.length === 0) { alert('Adicione pelo menos um item.'); return; } setTransferStep(prev => (prev + 1) as 1 | 2 | 3); }} className="flex-1 py-3.5 bg-violet-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-violet-700 transition flex items-center justify-center gap-2 shadow-lg shadow-violet-500/20">
+                  Continuar <ArrowRightLeft size={16} />
+                </button>
+              ) : (
+                <button onClick={handleSendTransfer} disabled={isSavingTransfer} className="flex-1 py-3.5 bg-violet-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-violet-700 transition flex items-center justify-center gap-2 shadow-lg shadow-violet-500/20 disabled:opacity-60">
+                  {isSavingTransfer ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />} Enviar Transferência
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {
         isModalOpen && (
+
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm">
             <div className="bg-white dark:bg-slate-900 rounded-[28px] shadow-2xl w-full max-w-2xl overflow-hidden border dark:border-slate-800 animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
 
