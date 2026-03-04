@@ -54,6 +54,9 @@ const WarehouseRegistration: React.FC = () => {
                 unitData.companyId
             );
 
+            // Logout automático para garantir uma sessão limpa ao redirecionar para o login
+            await db.logout();
+
             setSuccess(true);
             setTimeout(() => navigate('/'), 3000);
         } catch (err: any) {
