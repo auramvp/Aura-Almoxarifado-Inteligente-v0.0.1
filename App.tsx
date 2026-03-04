@@ -755,6 +755,13 @@ const App = () => {
     // lê os tokens do hash da URL ao inicializar e dispara SIGNED_IN aqui.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
+        // Ignorar SIGNED_IN disparado durante o registro de parceiro.
+        // O registerPartner faz signOut() ao final — aguardar o SIGNED_OUT que virá logo depois.
+        const isOnPartnerRegisterPage = window.location.hash.includes('/registro-parceiro');
+        if (isOnPartnerRegisterPage) {
+          setLoading(false);
+          return;
+        }
         // Magic link ou qualquer outro login: buscar perfil e logar
         const currentUser = await db.getCurrentUser();
         if (currentUser) {

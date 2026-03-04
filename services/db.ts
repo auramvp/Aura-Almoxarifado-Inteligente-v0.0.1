@@ -289,7 +289,7 @@ export const db = {
   },
 
   async registerPartner(userData: { name: string, email: string, password?: string }, companyData: { cnpj: string, name: string }): Promise<User> {
-    // 1. Create Auth User
+    // 1. Create Auth User (o signUp já loga automaticamente o usuário no Supabase)
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: userData.email,
       password: userData.password || Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12),
@@ -298,13 +298,6 @@ export const db = {
     if (authError) throw authError;
     if (!authData.user) throw new Error("Erro ao criar usuário de autenticação.");
 
-    // IMPORTANTE: Fazer signOut IMEDIATAMENTE após criar o usuário auth.
-    // Isso evita que o onAuthStateChange no App.tsx autentique automaticamente
-    // o parceiro recém-registrado e leve-o para o painel.
-    await supabase.auth.signOut();
-    localStorage.removeItem('aura_user');
-
-    // Guardar o ID antes de prosseguir (signOut não apaga o authData.user obtido)
     const newUserId = authData.user.id;
 
     // 2. Check if Company already exists or Create Company
@@ -344,11 +337,9 @@ export const db = {
     if (userErr) throw userErr;
 
     // 4. Create Automatic Partners Subscription for Partners
-    // First find the Partners plan ID
     const { data: plan } = await supabase.from('plans').select('id').eq('name', 'Partners').single();
 
     if (plan) {
-      // Check for existing active subscription
       const { data: existingSub } = await supabase
         .from('subscriptions')
         .select('id')
@@ -359,17 +350,11 @@ export const db = {
         .maybeSingle();
 
       if (existingSub) {
-        // Update existing to Partners
         await supabase
           .from('subscriptions')
-          .update({
-            plan_id: plan.id,
-            status: 'active',
-            updated_at: new Date().toISOString()
-          })
+          .update({ plan_id: plan.id, status: 'active', updated_at: new Date().toISOString() })
           .eq('id', existingSub.id);
       } else {
-        // Create new
         await supabase.from('subscriptions').insert({
           company_id: company.id,
           plan_id: plan.id,
@@ -378,15 +363,20 @@ export const db = {
         });
       }
 
-      // FORCE UPDATE COMPANY PLAN_ID to ensure it shows up immediately
       await supabase.from('companies').update({ plan_id: plan.id }).eq('id', company.id);
     }
 
-    // 5. Send Magic Link for immediate login
+    // 5. Send Magic Link for initial login
     await this.sendMagicLink(userData.email);
+
+    // 6. APENAS AGORA fazer signOut - após todas as operações de DB concluídas.
+    // Isso evita que o onAuthStateChange no App.tsx exiba o painel do parceiro.
+    await supabase.auth.signOut();
+    localStorage.removeItem('aura_user');
 
     return { id: user.id, name: user.name, email: user.email, role: user.role as UserRole, createdAt: user.created_at, companyId: user.company_id } as User;
   },
+
 
   async checkDailyDigest() {
     const user = await this.getCurrentUser();
