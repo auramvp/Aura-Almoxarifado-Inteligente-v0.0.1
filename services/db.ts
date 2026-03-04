@@ -112,6 +112,7 @@ export const db = {
           name: user.email.split('@')[0],
           email: user.email.toLowerCase(),
           role: UserRole.ALMOXARIFE,
+          // Sem company_id — não vincular a empresa errada automaticamente
         }).select().single();
         profile = newProfile;
       }
