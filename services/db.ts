@@ -84,6 +84,7 @@ export const db = {
     if (user) {
       let { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
 
+      // Fallback 1: buscar por email (cobre casos de ID desatualizado)
       if (!profile && user.email) {
         const { data: emailProfile } = await supabase.from('profiles')
           .select('*')
@@ -91,6 +92,7 @@ export const db = {
           .maybeSingle();
 
         if (emailProfile) {
+          // Tentar sincronizar o ID (pode falhar por RLS, mas tudo bem)
           const { data: updated, error: syncError } = await supabase
             .from('profiles')
             .update({ id: user.id })
@@ -98,12 +100,20 @@ export const db = {
             .select()
             .single();
 
-          if (!syncError) {
-            profile = updated;
-          } else {
-            profile = emailProfile;
-          }
+          profile = syncError ? emailProfile : (updated || emailProfile);
         }
+      }
+
+      // Fallback 2: se ainda não tem perfil, criar um mínimo automaticamente
+      // (cobre casos onde o auth user existe mas o perfil foi deletado ou nunca criado)
+      if (!profile && user.email) {
+        const { data: newProfile } = await supabase.from('profiles').insert({
+          id: user.id,
+          name: user.email.split('@')[0],
+          email: user.email.toLowerCase(),
+          role: UserRole.ALMOXARIFE,
+        }).select().single();
+        profile = newProfile;
       }
 
       if (!profile) return null;
@@ -137,6 +147,8 @@ export const db = {
 
     return null;
   },
+
+
 
   async login(email: string, password?: string): Promise<User | null> {
     if (password) {
