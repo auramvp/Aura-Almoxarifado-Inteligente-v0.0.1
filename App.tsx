@@ -316,12 +316,7 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
     if (!turnstileToken) { setError("Por favor, complete a verificação de segurança."); return; }
     setLoading(true); setError(null); setSuccessMessage(null);
     try {
-      const { data, error: vError } = await supabase.functions.invoke('verify-turnstile', {
-        body: { token: turnstileToken }
-      });
-      if (vError || !data.success) { setError("Verificação de segurança falhou. Tente novamente."); return; }
-
-      await db.sendMagicLink(formData.magicEmail);
+      await db.sendMagicLink(formData.magicEmail, turnstileToken);
       setSuccessMessage(`Link enviado para ${formData.magicEmail}! Verifique sua caixa de entrada.`);
       setFormData(prev => ({ ...prev, magicEmail: '' }));
       if (window.turnstile) window.turnstile.reset();
@@ -407,12 +402,7 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
     if (!turnstileToken) { setError("Por favor, complete a verificação de segurança."); return; }
     setError(null); setLoading(true);
     try {
-      const { data, error: vError } = await supabase.functions.invoke('verify-turnstile', {
-        body: { token: turnstileToken }
-      });
-      if (vError || !data.success) { setError("Verificação de segurança falhou."); return; }
-
-      const user = await db.login(formData.email, formData.password);
+      const user = await db.login(formData.email, formData.password, turnstileToken);
       if (user) onLogin(user);
       else {
         setError("Credenciais inválidas.");
@@ -427,12 +417,7 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
     if (!turnstileToken) { setError("Por favor, complete a verificação de segurança."); return; }
     setError(null); setSuccessMessage(null); setLoading(true);
     try {
-      const { data, error: vError } = await supabase.functions.invoke('verify-turnstile', {
-        body: { token: turnstileToken }
-      });
-      if (vError || !data.success) { setError("Verificação de segurança falhou."); return; }
-
-      await db.resetPassword(formData.email);
+      await db.resetPassword(formData.email, turnstileToken);
       setSuccessMessage("Instruções enviadas!");
       if (window.turnstile) window.turnstile.reset();
       setTurnstileToken(null);

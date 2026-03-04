@@ -166,12 +166,14 @@ export const db = {
 
 
 
-  async login(email: string, password?: string): Promise<User | null> {
+  async login(email: string, password?: string, captchaToken?: string): Promise<User | null> {
     if (password) {
-      await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email: email.toLowerCase(),
-        password
+        password,
+        options: { captchaToken }
       });
+      if (error) throw error;
     }
 
     const { data: profile } = await supabase.from('profiles').select('*').eq('email', email.toLowerCase()).single();
@@ -192,9 +194,10 @@ export const db = {
     return fullUser;
   },
 
-  async resetPassword(email: string): Promise<void> {
+  async resetPassword(email: string, captchaToken?: string): Promise<void> {
     const { error } = await supabase.auth.resetPasswordForEmail(email.toLowerCase(), {
       redirectTo: window.location.origin,
+      captchaToken
     });
     if (error) throw error;
   },
@@ -700,14 +703,15 @@ export const db = {
     }));
   },
 
-  async sendMagicLink(email: string): Promise<void> {
+  async sendMagicLink(email: string, captchaToken?: string): Promise<void> {
     const isProd = window.location.hostname === 'app.auraalmoxarifado.com.br';
     const redirectTo = isProd ? 'https://app.auraalmoxarifado.com.br' : window.location.origin;
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: redirectTo
+        emailRedirectTo: redirectTo,
+        captchaToken
       }
     });
     if (error) throw error;
