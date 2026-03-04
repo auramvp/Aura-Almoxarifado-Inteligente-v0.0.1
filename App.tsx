@@ -110,8 +110,8 @@ const TurnstileWidget = ({ onVerify, onExpire, siteKey }: { onVerify: (token: st
   return <div ref={widgetRef} className="flex justify-center my-4" />;
 };
 
-const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
-  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgotPassword' | 'onboarding'>('login');
+const AuthScreen = ({ onLogin, initialMode = 'login', onPasswordUpdated }: { onLogin: (user: User) => void, initialMode?: 'login' | 'register' | 'forgotPassword' | 'onboarding' | 'updatePassword', onPasswordUpdated?: () => void }) => {
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgotPassword' | 'onboarding' | 'updatePassword'>(initialMode);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -218,7 +218,7 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
       let friendlyMessage = "Ocorreu um erro na autenticação.";
 
       if (errorCode === 'otp_expired') {
-        friendlyMessage = "O link de acesso expirou. Por favor, solicite um novo link.";
+        friendlyMessage = "O link de acesso expirou. Isso pode acontecer se o link já foi usado ou se seu antivírus de e-mail clicou nele automaticamente. Por favor, solicite um novo link e abra-o imediatamente.";
       } else if (errorCode === 'access_denied') {
         friendlyMessage = "Acesso negado ou link inválido.";
       } else if (errorDesc) {
@@ -406,10 +406,26 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
     setError(null); setSuccessMessage(null); setLoading(true);
     try {
       await db.resetPassword(formData.email, turnstileToken);
-      setSuccessMessage("Instruções enviadas!");
+      setSuccessMessage("Instruções enviadas! Verifique sua caixa de entrada e SPAM.");
       if (window.turnstile) window.turnstile.reset();
       setTurnstileToken(null);
     } catch (err: any) { setError("Erro ao recuperar."); } finally { setLoading(false); }
+  };
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (registerData.password !== registerData.confirmPassword) { setError("Senhas não coincidem."); return; }
+    if (passwordStrength < 3) { setError("Senha muito fraca. Use letras maiúsculas, números e símbolos."); return; }
+    setLoading(true); setError(null);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: registerData.password });
+      if (error) throw error;
+      setSuccessMessage("Senha alterada com sucesso! Agora você pode entrar.");
+      setAuthMode('login');
+      if (onPasswordUpdated) onPasswordUpdated();
+    } catch (err: any) {
+      setError(err.message || "Erro ao atualizar senha.");
+    } finally { setLoading(false); }
   };
 
   const inputClass = "w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-sm transition-all";
@@ -439,7 +455,6 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
                     <span className="text-[10px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-full uppercase tracking-widest">Etapa {registerStep}/2</span>
                   </div>
                   {error && <div className="p-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-bold border border-red-100 flex items-center gap-2"><AlertCircle size={14} /> {error}</div>}
-
                   {registerStep === 1 ? (
                     <div className="space-y-3">
                       <div className="relative"><UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="Nome Completo" className={inputClass} value={registerData.name} onChange={e => setRegisterData({ ...registerData, name: e.target.value })} /></div>
@@ -455,7 +470,6 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
                           onChange={e => !emailFromUrl && setRegisterData({ ...registerData, email: e.target.value })}
                           onBlur={() => registerData.email && !emailFromUrl && checkSubscription(registerData.email)}
                         />
-                        {emailFromUrl && <Lock className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />}
                       </div>
                       <div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="password" placeholder="Senha" className={inputClass} value={registerData.password} onChange={e => setRegisterData({ ...registerData, password: e.target.value })} /></div>
                       <div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="password" placeholder="Confirmar Senha" className={inputClass} value={registerData.confirmPassword} onChange={e => setRegisterData({ ...registerData, confirmPassword: e.target.value })} /></div>
@@ -464,21 +478,9 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
                     <div className="space-y-3">
                       <div className="relative">
                         <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                        <input
-                          required
-                          type="text"
-                          placeholder="CNPJ"
-                          readOnly={cnpjFromUrl}
-                          className={inputClass + (cnpjFromUrl ? " opacity-60 cursor-not-allowed bg-slate-100 dark:bg-slate-700" : "")}
-                          value={registerData.cnpj}
-                          onChange={e => !cnpjFromUrl && setRegisterData({ ...registerData, cnpj: formatCNPJ(e.target.value) })}
-                          onBlur={() => !cnpjFromUrl && handleCNPJBlur()}
-                        />
-                        {cnpjFromUrl && <Lock className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />}
-                        {loading && !cnpjFromUrl && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-blue-600" size={16} />}
+                        <input required type="text" placeholder="CNPJ" readOnly={cnpjFromUrl} className={inputClass} value={registerData.cnpj} onChange={e => !cnpjFromUrl && setRegisterData({ ...registerData, cnpj: formatCNPJ(e.target.value) })} onBlur={() => !cnpjFromUrl && handleCNPJBlur()} />
                       </div>
                       <div className="relative"><Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="Empresa" className={inputClass} value={registerData.companyName} onChange={e => setRegisterData({ ...registerData, companyName: e.target.value })} /></div>
-                      <div className="relative"><MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="Endereço" className={inputClass} value={registerData.address} onChange={e => setRegisterData({ ...registerData, address: e.target.value })} /></div>
                     </div>
                   )}
                   <div className="flex gap-2">
@@ -490,43 +492,24 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
             </div>
           ) : authMode === 'onboarding' ? (
             <div className="p-6">
-              <form onSubmit={e => { e.preventDefault(); if (onboardingStep === 1) checkSubscription(registerData.email); else handleRegister(e); }} className="space-y-4">
-                <div className="flex justify-between items-end">
+              <form onSubmit={e => handleRegister(e)} className="space-y-4">
+                <div className="flex justify-between items-end mb-2">
                   <h3 className="text-lg font-bold">Configurar Acesso</h3>
-                  <span className="text-[10px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-full uppercase tracking-widest">Etapa {onboardingStep}/3</span>
+                  <span className="text-[10px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-full uppercase tracking-widest leading-none">Etapa {onboardingStep}/3</span>
                 </div>
-
-                {error && <div className="p-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-bold border border-red-100 flex items-center gap-2 animate-in slide-in-from-top-1"><AlertCircle size={14} /> {error}</div>}
-
+                {error && <div className="p-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-bold border border-red-100 flex items-center gap-2"><AlertCircle size={14} /> {error}</div>}
                 {onboardingStep === 1 ? (
                   <div className="space-y-4">
                     <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 rounded-xl">
-                      <p className="text-[10px] leading-relaxed text-blue-700 dark:text-blue-300 font-medium">
-                        <span className="font-black uppercase block mb-1">Aviso Importante</span>
-                        Insira o e-mail que você utilizou no momento da compra no <strong>Asaas</strong>. Precisamos dele para validar sua assinatura ativa.
-                      </p>
+                      <p className="text-[10px] leading-relaxed text-blue-700 dark:text-blue-300 font-medium">Use o e-mail da sua compra para validar seu acesso.</p>
                     </div>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                      <input
-                        required
-                        type="email"
-                        placeholder="E-mail da Compra"
-                        className={inputClass}
-                        value={registerData.email}
-                        onChange={e => setRegisterData({ ...registerData, email: e.target.value })}
-                      />
-                    </div>
-                    <TurnstileWidget
-                      siteKey={TURNSTILE_SITE_KEY}
-                      onVerify={setTurnstileToken}
-                      onExpire={() => setTurnstileToken(null)}
-                    />
+                    <div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="email" placeholder="E-mail da Compra" className={inputClass} value={registerData.email} onChange={e => setRegisterData({ ...registerData, email: e.target.value })} /></div>
+                    <TurnstileWidget siteKey={TURNSTILE_SITE_KEY} onVerify={setTurnstileToken} onExpire={() => setTurnstileToken(null)} />
                   </div>
                 ) : onboardingStep === 2 ? (
                   <div className="space-y-3">
-                    <div className="relative"><UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="Seu Nome Completo" className={inputClass} value={registerData.name} onChange={e => setRegisterData({ ...registerData, name: e.target.value })} /></div>
-                    <div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="password" placeholder="Criar Senia" className={inputClass} value={registerData.password} onChange={e => setRegisterData({ ...registerData, password: e.target.value })} /></div>
+                    <div className="relative"><UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="Nome Completo" className={inputClass} value={registerData.name} onChange={e => setRegisterData({ ...registerData, name: e.target.value })} /></div>
+                    <div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="password" placeholder="Criar Senha" className={inputClass} value={registerData.password} onChange={e => setRegisterData({ ...registerData, password: e.target.value })} /></div>
                     <div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="password" placeholder="Confirmar Senha" className={inputClass} value={registerData.confirmPassword} onChange={e => setRegisterData({ ...registerData, confirmPassword: e.target.value })} /></div>
                     <div className="flex gap-1 px-1">
                       {[1, 2, 3, 4].map((s) => (
@@ -536,110 +519,88 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <div className="relative">
-                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                      <input
-                        required
-                        type="text"
-                        placeholder="CNPJ da Empresa"
-                        readOnly={cnpjFromUrl}
-                        className={inputClass + (cnpjFromUrl ? " opacity-60 cursor-not-allowed bg-slate-100 dark:bg-slate-700" : "")}
-                        value={registerData.cnpj}
-                        onChange={e => !cnpjFromUrl && setRegisterData({ ...registerData, cnpj: formatCNPJ(e.target.value) })}
-                        onBlur={() => !cnpjFromUrl && handleCNPJBlur()}
-                      />
-                      {cnpjFromUrl && <Lock className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />}
-                      {loading && !cnpjFromUrl && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-blue-600" size={16} />}
-                    </div>
-                    <div className="relative"><Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="Nome Fantasia" className={inputClass} value={registerData.companyName} onChange={e => setRegisterData({ ...registerData, companyName: e.target.value })} /></div>
-                    <div className="relative"><MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="Endereço Completo" className={inputClass} value={registerData.address} onChange={e => setRegisterData({ ...registerData, address: e.target.value })} /></div>
+                    <div className="relative"><Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="CNPJ" readOnly={cnpjFromUrl} className={inputClass} value={registerData.cnpj} onChange={e => !cnpjFromUrl && setRegisterData({ ...registerData, cnpj: formatCNPJ(e.target.value) })} onBlur={() => !cnpjFromUrl && handleCNPJBlur()} /></div>
+                    <div className="relative"><Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="Empresa" className={inputClass} value={registerData.companyName} onChange={e => setRegisterData({ ...registerData, companyName: e.target.value })} /></div>
                   </div>
                 )}
-
                 <div className="flex gap-2">
-                  {onboardingStep > 1 && <button type="button" onClick={() => setOnboardingStep(prev => prev - 1)} className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-xl font-bold uppercase text-[10px] tracking-widest active:scale-95 transition-all">Voltar</button>}
-                  <button type="submit" disabled={loading} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg shadow-blue-500/20 active:scale-95 transition-all">{loading ? <Loader2 className="animate-spin mx-auto" size={16} /> : onboardingStep < 3 ? 'Continuar' : 'Finalizar Cadastro'}</button>
+                  {onboardingStep > 1 && <button type="button" onClick={() => setOnboardingStep(prev => prev - 1)} className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all">Voltar</button>}
+                  <button type="submit" disabled={loading} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg shadow-blue-500/20 transition-all">{loading ? <Loader2 className="animate-spin mx-auto" size={16} /> : onboardingStep < 3 ? 'Continuar' : 'Finalizar'}</button>
                 </div>
-                {onboardingStep === 1 && <button type="button" onClick={() => setAuthMode('login')} className="w-full text-slate-400 font-bold text-[10px] uppercase tracking-widest">Já tenho conta? Entrar</button>}
               </form>
             </div>
           ) : authMode === 'forgotPassword' ? (
             <div className="p-6 space-y-4">
-              <h3 className="text-lg font-bold">Recuperar Senha</h3>
-              <p className="text-xs text-slate-500">Digite seu e-mail para receber o acesso.</p>
-              {error && <div className="p-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-bold border border-red-100">{error}</div>}
-              {successMessage && <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-bold border border-emerald-100">{successMessage}</div>}
-              <div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="email" placeholder="Seu e-mail" className={inputClass} value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} /></div>
-              <TurnstileWidget
-                siteKey={TURNSTILE_SITE_KEY}
-                onVerify={setTurnstileToken}
-                onExpire={() => setTurnstileToken(null)}
-              />
-              <button onClick={handleForgotPassword} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest active:scale-95 transition-all">{loading ? <Loader2 className="animate-spin mx-auto" size={16} /> : 'Enviar Instruções'}</button>
-              <button onClick={() => setAuthMode('login')} className="w-full text-slate-400 font-bold text-[10px] uppercase tracking-widest">Voltar ao Login</button>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center"><Mail size={20} /></div>
+                <div>
+                  <h3 className="text-lg font-bold">Recuperar Senha</h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Acesso por e-mail</p>
+                </div>
+              </div>
+              {error && <div className="p-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-bold border border-red-100 flex items-center gap-2"><AlertCircle size={14} /> {error}</div>}
+              {successMessage && <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-bold border border-emerald-100 flex items-center gap-2"><CheckCircle size={14} /> {successMessage}</div>}
+
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="email" placeholder="Seu e-mail" className={inputClass} value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} /></div>
+                <TurnstileWidget siteKey={TURNSTILE_SITE_KEY} onVerify={setTurnstileToken} onExpire={() => setTurnstileToken(null)} />
+                <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg shadow-blue-500/20 transition-all">{loading ? <Loader2 className="animate-spin mx-auto" size={16} /> : 'Enviar Instruções'}</button>
+                <button type="button" onClick={() => setAuthMode('login')} className="w-full text-slate-400 font-bold text-[10px] uppercase tracking-widest">Voltar ao Login</button>
+              </form>
+            </div>
+          ) : authMode === 'updatePassword' ? (
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center"><KeyRound size={20} /></div>
+                <div>
+                  <h3 className="text-lg font-bold">Nova Senha</h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Defina seu novo acesso</p>
+                </div>
+              </div>
+              {error && <div className="p-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-bold border border-red-100 flex items-center gap-2"><AlertCircle size={14} /> {error}</div>}
+              {successMessage && <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-bold border border-emerald-100 flex items-center gap-2"><CheckCircle size={14} /> {successMessage}</div>}
+
+              <form onSubmit={handleUpdatePassword} className="space-y-4">
+                <div className="space-y-3">
+                  <div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="password" placeholder="Nova Senha" className={inputClass} value={registerData.password} onChange={e => setRegisterData({ ...registerData, password: e.target.value })} /></div>
+                  <div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="password" placeholder="Confirmar" className={inputClass} value={registerData.confirmPassword} onChange={e => setRegisterData({ ...registerData, confirmPassword: e.target.value })} /></div>
+                  <div className="flex gap-1 px-1">
+                    {[1, 2, 3, 4].map((s) => (
+                      <div key={s} className={`h-1 flex-1 rounded-full transition-all duration-500 ${s <= passwordStrength ? strengthColor : 'bg-slate-100 dark:bg-slate-800'}`} />
+                    ))}
+                  </div>
+                </div>
+                <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg shadow-blue-500/20 transition-all">{loading ? <Loader2 className="animate-spin mx-auto" size={16} /> : 'Salvar Senha'}</button>
+              </form>
             </div>
           ) : (
             <div className="p-6">
-              {error && <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-bold border border-red-100 flex items-center gap-2 animate-in slide-in-from-top-2 duration-300"><AlertCircle size={14} /> {error}</div>}
-              {successMessage && <div className="mb-4 p-3 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-bold border border-emerald-100 flex items-center gap-2 animate-in slide-in-from-top-2 duration-300"><CheckCircle size={14} /> {successMessage}</div>}
+              {error && <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-bold border border-red-100 flex items-center gap-2"><AlertCircle size={14} /> {error}</div>}
+              {successMessage && <div className="mb-4 p-3 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-bold border border-emerald-100 flex items-center gap-2"><CheckCircle size={14} /> {successMessage}</div>}
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-3">
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                    <input required type="email" placeholder="seu@email.com" className={inputClass} value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
-                  </div>
+                  <div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="email" placeholder="seu@email.com" className={inputClass} value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} /></div>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                    <input
-                      required
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Sua senha"
-                      className={inputClass}
-                      value={formData.password}
-                      onChange={e => setFormData({ ...formData, password: e.target.value })}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-600 transition-colors"
-                    >
-                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
+                    <input required type={showPassword ? "text" : "password"} placeholder="Sua senha" className={inputClass} value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button>
                   </div>
                 </div>
 
-                <div className="flex justify-center px-1">
-                  <button type="button" onClick={() => setAuthMode('forgotPassword')} className="text-[10px] font-bold text-slate-400 hover:text-blue-600 transition-colors uppercase tracking-widest">Esqueci minha senha</button>
+                <div className="text-center">
+                  <button type="button" onClick={() => setAuthMode('forgotPassword')} className="text-[10px] font-bold text-slate-400 hover:text-blue-600 uppercase tracking-widest">Esqueci minha senha</button>
                 </div>
 
-                <TurnstileWidget
-                  siteKey={TURNSTILE_SITE_KEY}
-                  onVerify={setTurnstileToken}
-                  onExpire={() => setTurnstileToken(null)}
-                />
+                <TurnstileWidget siteKey={TURNSTILE_SITE_KEY} onVerify={setTurnstileToken} onExpire={() => setTurnstileToken(null)} />
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg shadow-blue-500/20 active:scale-95 transition-all text-center flex items-center justify-center min-h-[44px]"
-                >
-                  {loading ? (
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="animate-spin" size={14} />
-                      <span>{turnstileToken ? 'Entrando...' : 'Verificando...'}</span>
-                    </div>
-                  ) : 'Entrar'}
+                <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg shadow-blue-500/20 transition-all">
+                  {loading ? <Loader2 className="animate-spin mx-auto" size={16} /> : 'Entrar'}
                 </button>
               </form>
 
-              <div className="pt-4 mt-2 border-t border-slate-100 dark:border-slate-800 text-center">
-                <button
-                  onClick={() => window.open('https://auraalmoxarifado.com.br', '_blank')}
-                  className="w-full py-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
-                >
-                  Ainda não tem acesso? Assinar Agora
-                </button>
+              <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800">
+                <button onClick={() => window.open('https://auraalmoxarifado.com.br', '_blank')} className="w-full py-2 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-widest">Ainda não tem acesso? Assinar Agora</button>
               </div>
             </div>
           )}
@@ -799,6 +760,7 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
   const [showSuspendedModal, setShowSuspendedModal] = useState(false);
+  const [recoveryMode, setRecoveryMode] = useState(false);
 
   useEffect(() => {
     // Timeout de segurança: se o Supabase não responder em 6s, libera a tela
@@ -828,6 +790,12 @@ const App = () => {
             const currentUser = await db.getCurrentUser(session.user);
             if (currentUser) setUser(currentUser);
           }
+        } else if (event === 'PASSWORD_RECOVERY') {
+          // Quando o usuário volta do e-mail de recuperação, o Supabase emite este evento.
+          // O usuário está logado temporariamente para mudar a senha.
+          setRecoveryMode(true);
+          setLoading(false);
+          return; // Não queremos processar o perfil agora, forçamos a troca de senha
         }
       } catch (err) {
         console.error("Erro na sincronização de autenticação:", err);
@@ -897,10 +865,16 @@ const App = () => {
 
   return (
     <Router>
-      {!user ? (
+      {!user || recoveryMode ? (
         <Routes>
           <Route path="/registro-parceiro" element={<PartnerRegistration />} />
-          <Route path="*" element={<AuthScreen onLogin={setUser} />} />
+          <Route path="*" element={
+            <AuthScreen
+              onLogin={setUser}
+              initialMode={recoveryMode ? 'updatePassword' : 'login'}
+              onPasswordUpdated={() => setRecoveryMode(false)}
+            />
+          } />
         </Routes>
       ) : (
         <div className={`h-screen flex bg-[#F8FAFC] dark:bg-slate-950 transition-colors duration-300 font-sans overflow-hidden`}>
