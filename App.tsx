@@ -609,9 +609,8 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center px-1">
+                <div className="flex justify-center px-1">
                   <button type="button" onClick={() => setAuthMode('forgotPassword')} className="text-[10px] font-bold text-slate-400 hover:text-blue-600 transition-colors uppercase tracking-widest">Esqueci minha senha</button>
-                  <button type="button" onClick={() => setAuthMode('register')} className="text-[10px] font-bold text-blue-600 hover:underline uppercase tracking-widest">Criar conta</button>
                 </div>
 
                 <TurnstileWidget
@@ -634,8 +633,13 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
                 </button>
               </form>
 
-              <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 text-center">
-                <button onClick={() => window.open('https://auraalmoxarifado.com.br', '_blank')} className="text-slate-400 hover:text-blue-600 text-[9px] font-black uppercase tracking-widest transition-colors">Ainda não tem acesso? Assinar Agora</button>
+              <div className="pt-4 mt-2 border-t border-slate-100 dark:border-slate-800 text-center">
+                <button
+                  onClick={() => window.open('https://auraalmoxarifado.com.br', '_blank')}
+                  className="w-full py-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                >
+                  Ainda não tem acesso? Assinar Agora
+                </button>
               </div>
             </div>
           )}

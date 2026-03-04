@@ -195,8 +195,11 @@ export const db = {
   },
 
   async resetPassword(email: string, captchaToken?: string): Promise<void> {
+    const isProd = window.location.hostname === 'app.auraalmoxarifado.com.br';
+    const redirectTo = isProd ? 'https://app.auraalmoxarifado.com.br' : window.location.origin;
+
     const { error } = await supabase.auth.resetPasswordForEmail(email.toLowerCase(), {
-      redirectTo: window.location.origin,
+      redirectTo,
       captchaToken
     });
     if (error) throw error;
