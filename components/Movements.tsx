@@ -230,6 +230,12 @@ const Movements = ({ user }: any) => {
     setIsDetailsOpen(true);
   };
 
+  const getCurrentStock = (productId: string) => {
+    return movements
+      .filter(m => m.productId === productId)
+      .reduce((acc, curr) => curr.type === MovementType.IN ? acc + curr.quantity : acc - curr.quantity, 0);
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -238,6 +244,15 @@ const Movements = ({ user }: any) => {
       if (invoiceFile) {
         if (!user?.companyId) throw new Error('Company ID not found');
         currentInvoiceUrl = await db.uploadTaxDocument(invoiceFile, user.companyId);
+      }
+
+      if (movementType === MovementType.OUT) {
+        const currentStock = getCurrentStock(formData.productId);
+        if (Number(formData.quantity) > currentStock) {
+          alert(`Quantidade insuficiente! Você só possui ${currentStock} no estoque deste item.`);
+          setIsSaving(false);
+          return;
+        }
       }
 
       const finalValue = Number(formData.totalValue);
@@ -363,6 +378,16 @@ const Movements = ({ user }: any) => {
 
   const handleAddTransferItem = () => {
     if (!selectedTransferProduct) return;
+
+    const currentStock = getCurrentStock(selectedTransferProduct.id);
+    const existingQtyInTransfer = transferItems.find(i => i.productId === selectedTransferProduct.id)?.quantity || 0;
+    const totalQtyRequested = existingQtyInTransfer + transferItemQty;
+
+    if (totalQtyRequested > currentStock) {
+      alert(`Quantidade insuficiente! Você só possui ${currentStock} no estoque deste item.`);
+      return;
+    }
+
     setTransferItems(prev => {
       const exists = prev.find(i => i.productId === selectedTransferProduct.id);
       if (exists) return prev.map(i => i.productId === selectedTransferProduct.id ? { ...i, quantity: i.quantity + transferItemQty } : i);

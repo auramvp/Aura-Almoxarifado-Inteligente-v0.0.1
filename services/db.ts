@@ -1465,6 +1465,21 @@ export const db = {
     reason: string;
     createdBy: string;
   }): Promise<{ id: string }> {
+
+    // Pre-flight check to validate stock available in the source company
+    for (const item of data.items) {
+      const { data: movementsData } = await supabase
+        .from('stock_movements')
+        .select('type, quantity')
+        .eq('product_id', item.productId)
+        .eq('company_id', data.fromCompanyId);
+
+      const currentStock = (movementsData || []).reduce((acc, curr) => curr.type === 'IN' ? acc + curr.quantity : acc - curr.quantity, 0);
+      if (currentStock < item.quantity) {
+        throw new Error(`Estoque insuficiente para transferir ${item.description}. Disponível: ${currentStock}`);
+      }
+    }
+
     const { data: transfer, error } = await supabase
       .from('stock_transfers')
       .insert({
