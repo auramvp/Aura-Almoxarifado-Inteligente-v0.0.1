@@ -16,7 +16,10 @@ interface SettingsProps {
 }
 
 const Settings: React.FC<SettingsProps> = ({ user, company }) => {
-  const [activeTab, setActiveTab] = useState<'users' | 'billing' | 'company' | 'alerts' | 'warehouses'>('company');
+  const isBranch = !!company?.parentId;
+  const [activeTab, setActiveTab] = useState<'users' | 'billing' | 'company' | 'alerts' | 'warehouses'>(
+    isBranch ? 'users' : 'company'
+  );
   const [warehouses, setWarehouses] = useState<Company[]>([]);
   const [loadingWarehouses, setLoadingWarehouses] = useState(false);
   const [showAddWarehouse, setShowAddWarehouse] = useState(false);
@@ -402,13 +405,15 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         {/* Sidebar de Navegação */}
         <div className="lg:col-span-1 space-y-2">
-          <button
-            onClick={() => setActiveTab('company')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'company' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white dark:bg-slate-900 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
-          >
-            <Building2 size={18} />
-            <span className="font-bold text-sm">Dados da Empresa</span>
-          </button>
+          {!isBranch && (
+            <button
+              onClick={() => setActiveTab('company')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'company' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white dark:bg-slate-900 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+            >
+              <Building2 size={18} />
+              <span className="font-bold text-sm">Dados da Empresa</span>
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('users')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white dark:bg-slate-900 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
@@ -416,13 +421,15 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
             <Users size={18} />
             <span className="font-bold text-sm">Usuários</span>
           </button>
-          <button
-            onClick={() => setActiveTab('billing')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'billing' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white dark:bg-slate-900 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
-          >
-            <CreditCard size={18} />
-            <span className="font-bold text-sm">Assinatura e Faturas</span>
-          </button>
+          {!isBranch && (
+            <button
+              onClick={() => setActiveTab('billing')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'billing' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white dark:bg-slate-900 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+            >
+              <CreditCard size={18} />
+              <span className="font-bold text-sm">Assinatura e Faturas</span>
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('alerts')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'alerts' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white dark:bg-slate-900 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}

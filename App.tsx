@@ -634,6 +634,16 @@ const SidebarItem = ({ to, icon: Icon, label, active, onClick, collapsed }: any)
 
 const CompanyCard = ({ company, collapsed, user }: { company: Company; collapsed: boolean; user: User }) => {
   const isAlmoxarife = user.role === UserRole.ALMOXARIFE;
+  const [parentName, setParentName] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (company.parentId) {
+      db.getCompanyById(company.parentId).then(c => setParentName(c?.name || null));
+    } else {
+      setParentName(null);
+    }
+  }, [company]);
+
   const content = (
     <>
       {/* Decorative background icon */}
@@ -647,10 +657,21 @@ const CompanyCard = ({ company, collapsed, user }: { company: Company; collapsed
 
       {!collapsed && (
         <div className="min-w-0 flex-1 relative z-10">
-          <h4 className="text-[10px] font-black text-white uppercase tracking-tighter truncate leading-tight">{company.name}</h4>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <div className="w-1 h-1 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
-            <span className="text-[9px] font-bold text-blue-100 uppercase tracking-widest opacity-80">Unidade Ativa</span>
+          <h4 className="text-[10px] font-black text-white uppercase tracking-tighter truncate leading-tight">
+            {parentName || company.name}
+          </h4>
+          <div className="flex flex-col mt-0.5">
+            {parentName && (
+              <span className="text-[9px] font-medium text-blue-100/70 truncate leading-tight italic">
+                {company.name}
+              </span>
+            )}
+            <div className="flex items-center gap-1.5 mt-1">
+              <div className="w-1 h-1 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
+              <span className="text-[8px] font-bold text-blue-100 uppercase tracking-widest opacity-80">
+                {parentName ? 'Unidade Ativa' : 'Matriz Ativa'}
+              </span>
+            </div>
           </div>
         </div>
       )}
