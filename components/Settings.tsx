@@ -219,9 +219,13 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
       setWarehouses([...warehouses, added]);
       setShowAddWarehouse(false);
       setNewWarehouse({ name: '', responsibleName: '', responsibleEmail: '' });
-    } catch (error) {
+
+      // Enviar convite automaticamente após criar
+      await handleSendInvite(added);
+
+    } catch (error: any) {
       console.error('Error adding warehouse:', error);
-      alert('Erro ao adicionar almoxarifado.');
+      alert(error.message || 'Erro ao adicionar almoxarifado.');
     } finally {
       setLoading(false);
     }

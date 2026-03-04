@@ -24,6 +24,7 @@ import Support from './components/Support.tsx';
 import Purchases from './components/Purchases.tsx';
 import Settings from './components/Settings.tsx';
 import PartnerRegistration from './components/PartnerRegistration.tsx';
+import WarehouseRegistration from './components/WarehouseRegistration.tsx';
 import AuraBackground from './components/ui/AuraBackground.tsx';
 import CompanySuspendedModal from './components/CompanySuspendedModal.tsx';
 import { SystemModule } from './services/db.ts';
@@ -391,13 +392,27 @@ const AuthScreen = ({ onLogin, initialMode = 'login', onPasswordUpdated }: { onL
     setError(null); setLoading(true);
     try {
       const user = await db.login(formData.email, formData.password, turnstileToken);
-      if (user) onLogin(user);
-      else {
-        setError("Credenciais inválidas.");
+      if (user) {
+        onLogin(user);
+      } else {
+        setError("Perfil de usuário não encontrado. Verifique seu e-mail ou entre em contato com o suporte.");
         if (window.turnstile) window.turnstile.reset();
         setTurnstileToken(null);
       }
-    } catch (err: any) { setError("Erro ao conectar."); } finally { setLoading(false); }
+    } catch (err: any) {
+      console.error("Erro detalhado no login:", err);
+      let msg = "Erro ao conectar. Tente novamente.";
+
+      if (err.message === 'Invalid login credentials') {
+        msg = "E-mail ou senha incorretos.";
+      } else if (err.message) {
+        msg = err.message;
+      }
+
+      setError(msg);
+      if (window.turnstile) window.turnstile.reset();
+      setTurnstileToken(null);
+    } finally { setLoading(false); }
   };
 
   const handleForgotPassword = async (e: React.FormEvent) => {
@@ -851,8 +866,9 @@ const App = () => {
   // Verificar se é a rota de registro de parceiro ANTES do loading
   // para não bloquear usuários acessando o link de convite
   const isPartnerRoute = window.location.hash.includes('/registro-parceiro');
+  const isWarehouseRoute = window.location.hash.includes('/registro-unidade');
 
-  if (loading && !isPartnerRoute) {
+  if (loading && !isPartnerRoute && !isWarehouseRoute) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
         <div className="flex flex-col items-center gap-4">
@@ -868,6 +884,7 @@ const App = () => {
       {!user || recoveryMode ? (
         <Routes>
           <Route path="/registro-parceiro" element={<PartnerRegistration />} />
+          <Route path="/registro-unidade" element={<WarehouseRegistration />} />
           <Route path="*" element={
             <AuthScreen
               onLogin={setUser}
@@ -980,6 +997,7 @@ const App = () => {
                   <Route path="/suporte" element={<Support user={user} />} />
                   <Route path="/configuracoes" element={user?.role === UserRole.ALMOXARIFE ? <Settings user={user} company={company!} /> : <Dashboard user={user} />} />
                   <Route path="/registro-parceiro" element={<PartnerRegistration />} />
+                  <Route path="/registro-unidade" element={<WarehouseRegistration />} />
                 </Routes>
               </div>
             </div>

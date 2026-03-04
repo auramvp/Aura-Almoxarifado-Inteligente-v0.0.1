@@ -354,6 +354,9 @@ export const db = {
 
     if (profileErr) throw profileErr;
 
+    // Ativar a empresa (unidade) ao finalizar o primeiro cadastro
+    await supabase.from('companies').update({ status: 'Ativo' }).eq('id', companyId);
+
     return {
       id: profile.id,
       name: profile.name,
@@ -545,7 +548,7 @@ export const db = {
     const { data: warehouse, error } = await supabase.from('companies').insert({
       name: data.name,
       parent_id: parentId,
-      cnpj: data.cnpj || (parent ? `${parent.cnpj}-FILIAL` : `FILIAL-${Math.random().toString(36).slice(-4)}`),
+      cnpj: data.cnpj || (parent ? `${parent.cnpj}-FILIAL-${Math.random().toString(36).slice(-4).toUpperCase()}` : `FILIAL-${Math.random().toString(36).slice(-4).toUpperCase()}`),
       sector_responsible: data.responsibleName,
       sector_email: data.responsibleEmail,
       email: data.responsibleEmail,
@@ -795,6 +798,8 @@ export const db = {
   async updateSector(id: string, updates: any): Promise<Sector> {
     const { data, error } = await supabase.from('sectors').update(updates).eq('id', id).select().single();
     if (error) throw error;
+    if (!data) throw new Error("Erro ao criar unidade: nenhum dado retornado."); // Changed 'warehouse' to 'data'
+
     return data;
   },
 
