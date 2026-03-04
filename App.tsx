@@ -768,11 +768,22 @@ const SidebarNavigation = ({ user, setSidebarOpen, collapsed }: any) => {
 };
 
 const App = () => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    const cached = localStorage.getItem('aura_user');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed && parsed.id && parsed.companyId) return parsed;
+      } catch (e) {
+        localStorage.removeItem('aura_user');
+      }
+    }
+    return null;
+  });
   const [company, setCompany] = useState<Company | null>(null);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!localStorage.getItem('aura_user'));
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
   const [showSuspendedModal, setShowSuspendedModal] = useState(false);
   const [recoveryMode, setRecoveryMode] = useState(false);
@@ -795,11 +806,18 @@ const App = () => {
             return;
           }
 
+          // Se o usuário atual já for o mesmo da sessão (login manual), evitamos buscar de novo
+          if (user?.id === session.user.id) {
+            setLoading(false);
+            return;
+          }
+
           const currentUser = await db.getCurrentUser(session.user);
           if (currentUser) setUser(currentUser);
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
           setCompany(null);
+          localStorage.removeItem('aura_user');
         } else if (event === 'INITIAL_SESSION') {
           if (session?.user) {
             const currentUser = await db.getCurrentUser(session.user);

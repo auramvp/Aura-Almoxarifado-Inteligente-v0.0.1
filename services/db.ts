@@ -86,6 +86,21 @@ export const db = {
       const { data: { user } } = authUser ? { data: { user: authUser } } : await supabase.auth.getUser();
 
       if (user) {
+        // Tentar obter do cache primeiro se o ID for o mesmo
+        const cached = localStorage.getItem('aura_user');
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (parsed && parsed.id === user.id && parsed.companyId) {
+              // Retorna o cache imediatamente mas pode atualizar em background se desejar
+              // Aqui vamos retornar direto para velocidade máxima
+              return parsed;
+            }
+          } catch (e) {
+            localStorage.removeItem('aura_user');
+          }
+        }
+
         let { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
 
         // Fallback 1: buscar por email (cobre casos de ID desatualizado)
@@ -167,16 +182,23 @@ export const db = {
 
 
   async login(email: string, password?: string, captchaToken?: string): Promise<User | null> {
+    let authUser: any = null;
     if (password) {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.toLowerCase(),
         password,
         options: { captchaToken }
       });
       if (error) throw error;
+      authUser = data.user;
     }
 
-    const { data: profile } = await supabase.from('profiles').select('*').eq('email', email.toLowerCase()).single();
+    // Se temos o authUser (do login manual), usamos o ID dele que é muito mais rápido que filtrar por email
+    const query = authUser
+      ? supabase.from('profiles').select('*').eq('id', authUser.id)
+      : supabase.from('profiles').select('*').eq('email', email.toLowerCase());
+
+    const { data: profile } = await query.maybeSingle();
     if (!profile) return null;
 
     const fullUser = {
