@@ -7,8 +7,8 @@ import {
   Loader2, AlertCircle, CheckCircle, Sparkles, Eye, EyeOff, Users,
   Mail, Lock, ShoppingCart, KeyRound, LifeBuoy, MapPin
 } from 'lucide-react';
-import { db, supabase } from './services/db.ts';
-import { User, UserRole, Company } from './types.ts';
+import { db, supabase, MODULE_MAPPING } from './services/db.ts';
+import { User, UserRole, Company, Subscription } from './types.ts';
 
 // Views
 import Dashboard from './components/Dashboard.tsx';
@@ -620,7 +620,18 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
                   onVerify={setTurnstileToken}
                   onExpire={() => setTurnstileToken(null)}
                 />
-                <button onClick={handleMagicLinkLogin} disabled={loading || !formData.magicEmail} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg shadow-blue-500/20 active:scale-95 transition-all">{loading ? <Loader2 className="animate-spin mx-auto" size={16} /> : 'Link Mágico'}</button>
+                <button
+                  onClick={handleMagicLinkLogin}
+                  disabled={loading || !formData.magicEmail}
+                  className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg shadow-blue-500/20 active:scale-95 transition-all text-center flex items-center justify-center min-h-[44px]"
+                >
+                  {loading ? (
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="animate-spin" size={14} />
+                      <span>{turnstileToken ? 'Enviando...' : 'Verificando...'}</span>
+                    </div>
+                  ) : 'Link Mágico'}
+                </button>
               </div>
 
               <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 text-center">
@@ -717,22 +728,16 @@ const SidebarNavigation = ({ user, setSidebarOpen, collapsed }: any) => {
   const location = useLocation();
   const isAlmoxarife = user.role === UserRole.ALMOXARIFE;
 
-  const [allowedModules, setAllowedModules] = useState<Record<string, boolean>>({});
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
 
   useEffect(() => {
     if (user?.companyId) {
-      const modules: SystemModule[] = ['inventory', 'reports', 'ai', 'purchases', 'sectors', 'suppliers', 'support'];
-      Promise.all(modules.map(m => db.canAccessModule(user.companyId, m)))
-        .then(results => {
-          const mapping: Record<string, boolean> = {};
-          modules.forEach((m, i) => mapping[m] = results[i]);
-          setAllowedModules(mapping);
-        });
+      db.getSubscription(user.companyId).then(setSubscription);
     }
   }, [user]);
 
   const canAccess = (module: string) => {
-    // Permission-based check (Role/Permissions)
+    // 1. Permission-based check (Role/Permissions)
     let hasPermission = false;
     if (isAlmoxarife) hasPermission = true;
     else if (user.permissions) {
@@ -740,12 +745,25 @@ const SidebarNavigation = ({ user, setSidebarOpen, collapsed }: any) => {
       hasPermission = user.permissions[module] && user.permissions[module] !== 'none';
     }
 
-    // Plan-based check (Modules)
-    // Some modules map directly to internal names
-    const planModule = module === 'products' ? 'inventory' : (module as SystemModule);
-    const isModuleAllowedByPlan = allowedModules[planModule] ?? true; // Default to true while loading to avoid flickering
+    // 2. Plan-based check (Modules)
+    if (!subscription) return hasPermission; // Allow while loading, or handle differently
 
-    return hasPermission && isModuleAllowedByPlan;
+    const planModule = module === 'products' ? 'inventory' : (module as SystemModule);
+
+    // Check features
+    const features = subscription.plan?.features || [];
+    if (features.length === 0) return planModule === 'inventory' ? hasPermission : false;
+
+    const normalizedPlanName = subscription.plan.name.toLowerCase();
+    if (normalizedPlanName.includes('partners') || normalizedPlanName.includes('enterprise')) return hasPermission;
+
+    const isAllowedByPlan = features.some(feature => {
+      const f = feature.toLowerCase();
+      if (f.includes('ilimitado') || f.includes('unlimited') || f.includes('todos os módulos')) return true;
+      return MODULE_MAPPING[feature] === planModule;
+    });
+
+    return hasPermission && isAllowedByPlan;
   };
 
   return (
@@ -796,14 +814,14 @@ const App = () => {
             return;
           }
 
-          const currentUser = await db.getCurrentUser();
+          const currentUser = await db.getCurrentUser(session.user);
           if (currentUser) setUser(currentUser);
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
           setCompany(null);
         } else if (event === 'INITIAL_SESSION') {
           if (session?.user) {
-            const currentUser = await db.getCurrentUser();
+            const currentUser = await db.getCurrentUser(session.user);
             if (currentUser) setUser(currentUser);
           }
         }

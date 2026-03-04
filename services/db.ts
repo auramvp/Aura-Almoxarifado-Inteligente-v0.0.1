@@ -32,6 +32,9 @@ export const MODULE_MAPPING: Record<string, SystemModule> = {
   'Ilimitado': 'inventory'
 };
 
+// Cache de assinaturas para evitar múltiplas chamadas lentas (TTL de 30s)
+const subscriptionCache: Record<string, { data: Subscription; timestamp: number }> = {};
+
 export const db = {
   async getImportHistory(): Promise<AuditLog[]> {
     const user = await this.getCurrentUser();
@@ -78,9 +81,9 @@ export const db = {
     });
   },
 
-  async getCurrentUser(): Promise<User | null> {
+  async getCurrentUser(authUser?: any): Promise<User | null> {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = authUser ? { data: { user: authUser } } : await supabase.auth.getUser();
 
       if (user) {
         let { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
@@ -571,6 +574,8 @@ export const db = {
   async logout() {
     await supabase.auth.signOut();
     localStorage.removeItem('aura_user');
+    // Limpar cache de assinatura no logout
+    Object.keys(subscriptionCache).forEach(key => delete subscriptionCache[key]);
   },
 
   async getCompanyById(id: string): Promise<Company | null> {
@@ -598,10 +603,15 @@ export const db = {
   },
 
   async getSubscription(companyId: string): Promise<Subscription | null> {
-    const company = await this.getCompanyById(companyId);
+    const now = Date.now();
+    const cached = subscriptionCache[companyId];
+    if (cached && (now - cached.timestamp < 30000)) {
+      return cached.data;
+    }
+
+    const { data: company } = await supabase.from('companies').select('*').eq('id', companyId).maybeSingle();
     if (!company) return null;
 
-    // 1. Try to get subscription data (for status, billing etc)
     const { data: sub } = await supabase
       .from('subscriptions')
       .select('*')
@@ -609,29 +619,28 @@ export const db = {
       .in('status', ['active', 'trialing', 'past_due', 'Ativo'])
       .order('created_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    // 2. Resolve Plan details (Priority: company.planId > subscription.plan_id > subscription.plan name)
     let planData = null;
-    if (company.planId) {
-      const { data: plan } = await supabase.from('plans').select('*').eq('id', company.planId).single();
+    if (company.plan_id) {
+      const { data: plan } = await supabase.from('plans').select('*').eq('id', company.plan_id).maybeSingle();
       planData = plan;
     } else if (sub?.plan_id) {
-      const { data: plan } = await supabase.from('plans').select('*').eq('id', sub.plan_id).single();
+      const { data: plan } = await supabase.from('plans').select('*').eq('id', sub.plan_id).maybeSingle();
       planData = plan;
     } else if (sub?.plan) {
-      const { data: plan } = await supabase.from('plans').select('*').eq('name', sub.plan).single();
+      const { data: plan } = await supabase.from('plans').select('*').eq('name', sub.plan).maybeSingle();
       planData = plan;
     }
 
     if (!planData && !sub) return null;
 
-    return {
+    const subscription: Subscription = {
       id: sub?.id || 'manual-' + companyId,
       companyId: companyId,
       planId: planData?.id || sub?.plan_id || '',
       status: (sub?.status === 'Ativo' ? 'active' : sub?.status || 'active') as any,
-      startDate: sub?.created_at || company.createdAt,
+      startDate: sub?.created_at || company.created_at,
       nextBillingDate: sub?.next_billing || sub?.next_billing_date || '',
       paymentMethod: sub?.payment_method || 'PIX',
       plan: {
@@ -647,6 +656,9 @@ export const db = {
         active: true
       }
     };
+
+    subscriptionCache[companyId] = { data: subscription, timestamp: now };
+    return subscription;
   },
 
   async getInvoices(companyId: string): Promise<Invoice[]> {
