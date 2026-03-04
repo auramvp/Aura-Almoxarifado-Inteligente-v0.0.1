@@ -44,9 +44,8 @@ const PartnerRegistration: React.FC = () => {
                     name: partnerData.companyName
                 }
             );
-            // Fazer logout para não logar automaticamente o parceiro recém-cadastrado
-            // O parceiro vai entrar usando o Magic Link que foi enviado por email
-            await db.logout();
+            // O logout já é feito dentro de registerPartner.
+            // Marcamos sucesso e redirecionamos para o login após 3s.
             setSuccess(true);
             setTimeout(() => navigate('/'), 3000);
         } catch (err: any) {
@@ -67,16 +66,18 @@ const PartnerRegistration: React.FC = () => {
                     </div>
                     <h2 className="text-2xl font-black text-white mb-4">Conta Criada!</h2>
                     <p className="text-blue-100/80 leading-relaxed mb-6 text-sm">
-                        Seu cadastro foi concluído. Acabamos de enviar um <span className="font-bold text-white text-base block my-2 text-blue-400">Link Mágico de Acesso</span> para o seu e-mail corporativo.
+                        Seu cadastro foi concluído com sucesso! Verifique seu e-mail
+                        <span className="font-bold text-white text-base block my-2 text-blue-400">{partnerData.email}</span>
+                        para acessar o link de entrada enviado pela Aura.
                     </p>
                     <p className="text-blue-100/60 text-xs mb-8">
-                        Verifique sua caixa de entrada (e spam) e clique no botão para entrar na Aura agora mesmo.
+                        Você será redirecionado para o login em instantes...
                     </p>
                     <button
                         onClick={() => navigate('/')}
                         className="w-full py-4 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all border border-white/10"
                     >
-                        Voltar para o Início
+                        Ir para o Login Agora
                     </button>
                 </div>
             </div>

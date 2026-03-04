@@ -298,6 +298,15 @@ export const db = {
     if (authError) throw authError;
     if (!authData.user) throw new Error("Erro ao criar usuário de autenticação.");
 
+    // IMPORTANTE: Fazer signOut IMEDIATAMENTE após criar o usuário auth.
+    // Isso evita que o onAuthStateChange no App.tsx autentique automaticamente
+    // o parceiro recém-registrado e leve-o para o painel.
+    await supabase.auth.signOut();
+    localStorage.removeItem('aura_user');
+
+    // Guardar o ID antes de prosseguir (signOut não apaga o authData.user obtido)
+    const newUserId = authData.user.id;
+
     // 2. Check if Company already exists or Create Company
     let company;
 
@@ -325,7 +334,7 @@ export const db = {
 
     // 3. Create Profile
     const { data: user, error: userErr } = await supabase.from('profiles').insert({
-      id: authData.user.id,
+      id: newUserId,
       name: userData.name,
       email: userData.email,
       role: UserRole.ALMOXARIFE,
