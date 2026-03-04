@@ -629,7 +629,8 @@ export const db = {
       status: data.status || 'active',
       suspensionReason: data.status_reason,
       planId: data.plan_id,
-      createdAt: data.created_at
+      createdAt: data.created_at,
+      parentId: data.parent_id
     };
   },
 
@@ -928,7 +929,8 @@ export const db = {
       settings: data.settings,
       status: data.status || 'active',
       suspensionReason: data.suspension_reason,
-      createdAt: data.created_at
+      createdAt: data.created_at,
+      parentId: data.parent_id
     };
   },
 
