@@ -779,39 +779,47 @@ const App = () => {
   const [showSuspendedModal, setShowSuspendedModal] = useState(false);
 
   useEffect(() => {
-    // Listener para mudanças de estado de autenticação
-    // Isso captura automaticamente o login via Magic Link:
-    // o SDK do Supabase com detectSessionInUrl:true + flowType:'implicit'
-    // lê os tokens do hash da URL ao inicializar e dispara SIGNED_IN aqui.
+    // Timeout de segurança: se o Supabase não responder em 6s, libera a tela
+    const safetyTimeout = setTimeout(() => {
+      if (loading) {
+        console.warn("Safety timeout: auth state did not resolve in 6s. Unblocking UI.");
+        setLoading(false);
+      }
+    }, 6000);
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        // Ignorar SIGNED_IN disparado durante o registro de parceiro.
-        // O registerPartner faz signOut() ao final — aguardar o SIGNED_OUT que virá logo depois.
-        const isOnPartnerRegisterPage = window.location.hash.includes('/registro-parceiro');
-        if (isOnPartnerRegisterPage) {
-          setLoading(false);
-          return;
-        }
-        // Magic link ou qualquer outro login: buscar perfil e logar
-        const currentUser = await db.getCurrentUser();
-        if (currentUser) {
-          setUser(currentUser);
-        }
-        setLoading(false);
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setLoading(false);
-      } else if (event === 'INITIAL_SESSION') {
-        // Sessão existente ao carregar o app (usuário já logado)
-        if (session?.user) {
+      try {
+        if (event === 'SIGNED_IN' && session?.user) {
+          const isOnPartnerRegisterPage = window.location.hash.includes('/registro-parceiro');
+          if (isOnPartnerRegisterPage) {
+            setLoading(false);
+            return;
+          }
+
           const currentUser = await db.getCurrentUser();
-          setUser(currentUser);
+          if (currentUser) setUser(currentUser);
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setCompany(null);
+        } else if (event === 'INITIAL_SESSION') {
+          if (session?.user) {
+            const currentUser = await db.getCurrentUser();
+            if (currentUser) setUser(currentUser);
+          }
         }
+      } catch (err) {
+        console.error("Erro na sincronização de autenticação:", err);
+      } finally {
+        // Sempre liberar o loading após tentar resolver o estado inicial
         setLoading(false);
+        clearTimeout(safetyTimeout);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(safetyTimeout);
+    };
   }, []);
 
 

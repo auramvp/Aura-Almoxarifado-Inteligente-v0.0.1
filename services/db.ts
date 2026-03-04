@@ -79,59 +79,71 @@ export const db = {
   },
 
   async getCurrentUser(): Promise<User | null> {
-    const { data: { user } } = await supabase.auth.getUser();
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
 
-    if (user) {
-      let { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+      if (user) {
+        let { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
 
-      // Fallback 1: buscar por email (cobre casos de ID desatualizado)
-      if (!profile && user.email) {
-        const { data: emailProfile } = await supabase.from('profiles')
-          .select('*')
-          .eq('email', user.email.toLowerCase())
-          .maybeSingle();
-
-        if (emailProfile) {
-          // Tentar sincronizar o ID (pode falhar por RLS, mas tudo bem)
-          const { data: updated, error: syncError } = await supabase
-            .from('profiles')
-            .update({ id: user.id })
+        // Fallback 1: buscar por email (cobre casos de ID desatualizado)
+        if (!profile && user.email) {
+          const { data: emailProfile } = await supabase.from('profiles')
+            .select('*')
             .eq('email', user.email.toLowerCase())
-            .select()
-            .single();
+            .maybeSingle();
 
-          profile = syncError ? emailProfile : (updated || emailProfile);
+          if (emailProfile) {
+            try {
+              // Tentar sincronizar o ID (pode falhar por RLS, mas tudo bem)
+              const { data: updated, error: syncError } = await supabase
+                .from('profiles')
+                .update({ id: user.id })
+                .eq('email', user.email.toLowerCase())
+                .select()
+                .single();
+
+              profile = syncError ? emailProfile : (updated || emailProfile);
+            } catch (syncErr) {
+              profile = emailProfile;
+            }
+          }
         }
+
+        // Fallback 2: se ainda não tem perfil, criar um mínimo automaticamente
+        // (cobre casos onde o auth user existe mas o perfil foi deletado ou nunca criado)
+        if (!profile && user.email) {
+          try {
+            const { data: newProfile } = await supabase.from('profiles').insert({
+              id: user.id,
+              name: user.email.split('@')[0],
+              email: user.email.toLowerCase(),
+              role: UserRole.ALMOXARIFE,
+              // Sem company_id — não vincular a empresa errada automaticamente
+            }).select().single();
+            profile = newProfile;
+          } catch (insertErr) {
+            console.error("Erro ao criar perfil de fallback:", insertErr);
+          }
+        }
+
+        if (!profile) return null;
+
+        const fullUser = {
+          id: profile.id,
+          name: profile.name,
+          email: profile.email,
+          role: profile.role as UserRole,
+          createdAt: profile.created_at,
+          companyId: profile.company_id,
+          accessCode: profile.access_code,
+          permissions: profile.permissions
+        } as User;
+
+        localStorage.setItem('aura_user', JSON.stringify(fullUser));
+        return fullUser;
       }
-
-      // Fallback 2: se ainda não tem perfil, criar um mínimo automaticamente
-      // (cobre casos onde o auth user existe mas o perfil foi deletado ou nunca criado)
-      if (!profile && user.email) {
-        const { data: newProfile } = await supabase.from('profiles').insert({
-          id: user.id,
-          name: user.email.split('@')[0],
-          email: user.email.toLowerCase(),
-          role: UserRole.ALMOXARIFE,
-          // Sem company_id — não vincular a empresa errada automaticamente
-        }).select().single();
-        profile = newProfile;
-      }
-
-      if (!profile) return null;
-
-      const fullUser = {
-        id: profile.id,
-        name: profile.name,
-        email: profile.email,
-        role: profile.role as UserRole,
-        createdAt: profile.created_at,
-        companyId: profile.company_id,
-        accessCode: profile.access_code,
-        permissions: profile.permissions
-      } as User;
-
-      localStorage.setItem('aura_user', JSON.stringify(fullUser));
-      return fullUser;
+    } catch (err) {
+      console.error("Erro ao buscar usuário atual:", err);
     }
 
     const cached = localStorage.getItem('aura_user');
