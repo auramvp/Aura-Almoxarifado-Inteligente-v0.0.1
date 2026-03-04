@@ -16,7 +16,15 @@ interface SettingsProps {
 }
 
 const Settings: React.FC<SettingsProps> = ({ user, company }) => {
-  const [activeTab, setActiveTab] = useState<'users' | 'billing' | 'company' | 'alerts'>('company');
+  const [activeTab, setActiveTab] = useState<'users' | 'billing' | 'company' | 'alerts' | 'warehouses'>('company');
+  const [warehouses, setWarehouses] = useState<Company[]>([]);
+  const [loadingWarehouses, setLoadingWarehouses] = useState(false);
+  const [showAddWarehouse, setShowAddWarehouse] = useState(false);
+  const [newWarehouse, setNewWarehouse] = useState({
+    name: '',
+    responsibleName: '',
+    responsibleEmail: ''
+  });
   const [showAddUser, setShowAddUser] = useState(false);
 
   // Alert Settings State
@@ -111,6 +119,25 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
     }
   }, [activeTab, company]);
 
+  React.useEffect(() => {
+    if (activeTab === 'warehouses' && company) {
+      loadWarehouses();
+    }
+  }, [activeTab, company]);
+
+  const loadWarehouses = async () => {
+    if (!company) return;
+    setLoadingWarehouses(true);
+    try {
+      const data = await db.getCompanyWarehouses(company.id);
+      setWarehouses(data);
+    } catch (error) {
+      console.error('Error loading warehouses:', error);
+    } finally {
+      setLoadingWarehouses(false);
+    }
+  };
+
   const loadUsers = async () => {
     if (!company) return;
     setLoadingUsers(true);
@@ -180,6 +207,38 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
     } finally {
       setLoading(false);
       setIsEditing(false);
+    }
+  };
+
+  const handleAddWarehouse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!company) return;
+    setLoading(true);
+    try {
+      const added = await db.addWarehouse(company.id, newWarehouse);
+      setWarehouses([...warehouses, added]);
+      setShowAddWarehouse(false);
+      setNewWarehouse({ name: '', responsibleName: '', responsibleEmail: '' });
+    } catch (error) {
+      console.error('Error adding warehouse:', error);
+      alert('Erro ao adicionar almoxarifado.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendInvite = async (warehouse: Company) => {
+    try {
+      await EmailService.sendWarehouseInvitation(
+        warehouse.sectorEmail || warehouse.email,
+        warehouse.name,
+        company?.name || 'Sua Empresa',
+        warehouse.id
+      );
+      alert(`Convite enviado com sucesso para ${warehouse.sectorEmail || warehouse.email}`);
+    } catch (error) {
+      console.error('Error sending invite:', error);
+      alert('Erro ao enviar convite.');
     }
   };
 
@@ -367,6 +426,15 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
             <Bell size={18} />
             <span className="font-bold text-sm">Alertas e Notificações</span>
           </button>
+          {!company?.parentId && (
+            <button
+              onClick={() => setActiveTab('warehouses')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'warehouses' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white dark:bg-slate-900 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+            >
+              <Warehouse size={18} />
+              <span className="font-bold text-sm">Almoxarifados (Unidades)</span>
+            </button>
+          )}
         </div>
 
         {/* Conteúdo Principal */}
@@ -1174,6 +1242,114 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
               </div>
             </div>
           )}
+
+          {activeTab === 'warehouses' && (
+            <div className="bg-white dark:bg-slate-900 rounded-[32px] p-8 border border-slate-200 dark:border-slate-800 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Gestão de Almoxarifados</h3>
+                  <p className="text-sm text-slate-400">Configure múltiplas unidades para sua organização.</p>
+                </div>
+                <button
+                  onClick={() => setShowAddWarehouse(true)}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition flex items-center gap-2 shadow-lg shadow-blue-500/20"
+                >
+                  <Plus size={16} /> Adicionar Unidade
+                </button>
+              </div>
+
+              {showAddWarehouse && (
+                <div className="mb-8 p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 animate-in slide-in-from-top-4">
+                  <h4 className="font-bold text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2">
+                    <Warehouse size={18} className="text-blue-600" /> Nova Unidade (Filial)
+                  </h4>
+                  <form onSubmit={handleAddWarehouse} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <input
+                        required
+                        placeholder="Nome do Almoxarifado (Ex: Almoxarifado Serra)"
+                        value={newWarehouse.name}
+                        onChange={e => setNewWarehouse({ ...newWarehouse, name: e.target.value })}
+                        className="w-full px-4 py-3 bg-white dark:bg-slate-800 rounded-xl border-none focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                    </div>
+                    <input
+                      required
+                      placeholder="Pessoa Responsável"
+                      value={newWarehouse.responsibleName}
+                      onChange={e => setNewWarehouse({ ...newWarehouse, responsibleName: e.target.value })}
+                      className="px-4 py-3 bg-white dark:bg-slate-800 rounded-xl border-none focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <Mail size={18} className="text-blue-600" />
+                      </div>
+                      <input
+                        required
+                        type="email"
+                        placeholder="E-mail do Responsável"
+                        value={newWarehouse.responsibleEmail}
+                        onChange={e => setNewWarehouse({ ...newWarehouse, responsibleEmail: e.target.value })}
+                        className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-800 rounded-xl border-none focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                    </div>
+                    <div className="md:col-span-2 flex gap-3 pt-2">
+                      <button type="button" onClick={() => setShowAddWarehouse(false)} className="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition">Cancelar</button>
+                      <button type="submit" className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition shadow-lg shadow-blue-500/20" disabled={loading}>
+                        {loading ? <Loader2 className="animate-spin mx-auto" size={20} /> : 'Adicionar Unidade'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {loadingWarehouses ? (
+                  <div className="text-center py-8">
+                    <Loader2 size={32} className="animate-spin text-blue-600 mx-auto" />
+                    <p className="text-slate-500 mt-2">Carregando almoxarifados...</p>
+                  </div>
+                ) : warehouses.length === 0 ? (
+                  <div className="text-center py-12 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-[32px]">
+                    <Warehouse size={48} className="text-slate-200 mx-auto mb-4" />
+                    <p className="text-slate-400 font-medium">Nenhuma unidade adicional configurada.</p>
+                  </div>
+                ) : (
+                  warehouses.map((w) => (
+                    <div key={w.id} className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-slate-50 dark:bg-slate-800/30 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-blue-200 dark:hover:border-blue-800 transition-all gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center text-blue-600 shadow-sm border border-slate-100 dark:border-slate-700">
+                          <Warehouse size={24} />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-slate-800 dark:text-slate-200">{w.name}</h4>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+                            <p className="text-xs text-slate-500 flex items-center gap-1">
+                              <Users size={12} /> {w.sectorResponsible}
+                            </p>
+                            <p className="text-xs text-slate-500 flex items-center gap-1">
+                              <Mail size={12} /> {w.sectorEmail}
+                            </p>
+                            <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${w.status === 'Ativo' ? 'text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' : 'text-amber-500 bg-amber-50 dark:bg-amber-900/20'}`}>
+                              {w.status}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleSendInvite(w)}
+                          className="flex-1 md:flex-none px-4 py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg font-bold text-xs uppercase tracking-widest hover:bg-blue-100 dark:hover:bg-blue-900/40 transition flex items-center justify-center gap-2"
+                        >
+                          <Mail size={14} /> Enviar Convite de Acesso
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
       {
@@ -1329,7 +1505,7 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
           </div>
         )
       }
-    </div >
+    </div>
   );
 };
 

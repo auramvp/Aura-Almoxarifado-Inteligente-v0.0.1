@@ -288,6 +288,61 @@ export const db = {
     return { id: user.id, name: user.name, email: user.email, role: user.role, createdAt: user.created_at, companyId: user.company_id } as User;
   },
 
+  async registerWarehouseAdmin(userData: any, companyId: string): Promise<User> {
+    let finalAuthUser: any;
+
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: userData.email,
+        password: userData.password,
+      });
+
+      if (authError) {
+        if (authError.message.includes("User already registered") || authError.status === 422) {
+          const { data: { user: currentUser } } = await supabase.auth.getUser();
+          if (currentUser && currentUser.email === userData.email) {
+            finalAuthUser = currentUser;
+          } else {
+            throw authError;
+          }
+        } else {
+          throw authError;
+        }
+      } else {
+        finalAuthUser = authData.user;
+      }
+    } catch (err: any) {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (currentUser && currentUser.email === userData.email) {
+        finalAuthUser = currentUser;
+      } else {
+        throw err;
+      }
+    }
+
+    if (!finalAuthUser) throw new Error("Erro ao identificar usuário de autenticação.");
+
+    // Vincular o usuário à empresa (filial) existente
+    const { data: profile, error: profileErr } = await supabase.from('profiles').upsert({
+      id: finalAuthUser.id,
+      name: userData.name,
+      email: userData.email,
+      role: UserRole.ALMOXARIFE,
+      company_id: companyId
+    }, { onConflict: 'id' }).select().single();
+
+    if (profileErr) throw profileErr;
+
+    return {
+      id: profile.id,
+      name: profile.name,
+      email: profile.email,
+      role: profile.role,
+      createdAt: profile.created_at,
+      companyId: profile.company_id
+    } as User;
+  },
+
   async registerPartner(userData: { name: string, email: string, password?: string }, companyData: { cnpj: string, name: string }): Promise<User> {
     console.log("Iniciando registerPartner para:", userData.email);
     let finalAuthUser: any;
@@ -424,11 +479,81 @@ export const db = {
 
 
 
+  async getCompanyWarehouses(parentId: string): Promise<Company[]> {
+    const { data, error } = await supabase
+      .from('companies')
+      .select('*')
+      .eq('parent_id', parentId)
+      .order('name');
+
+    if (error) throw error;
+    return (data || []).map(d => ({
+      id: d.id,
+      cnpj: d.cnpj,
+      name: d.name,
+      address: d.address,
+      email: d.email,
+      phone: d.phone,
+      logo: d.logo,
+      sectorName: d.sector_name,
+      sectorResponsible: d.sector_responsible,
+      sectorWhatsApp: d.sector_whatsapp,
+      sectorEmail: d.sector_email,
+      contactExtra: d.contact_extra,
+      settings: d.settings,
+      status: d.status,
+      suspensionReason: d.status_reason,
+      planId: d.plan_id,
+      createdAt: d.created_at,
+      parentId: d.parent_id
+    }));
+  },
+
   async checkDailyDigest() {
     const user = await this.getCurrentUser();
     if (user?.companyId) {
+      const { AlertService } = await import('./alertService');
       await AlertService.checkAndSendDailyDigest(this, user.companyId);
     }
+  },
+
+  async addWarehouse(parentId: string, data: { name: string, responsibleName: string, responsibleEmail: string, cnpj?: string }): Promise<Company> {
+    // Buscar dados da matriz para replicar CNPJ se não informado (ou base do CNPJ)
+    const { data: parent } = await supabase.from('companies').select('*').eq('id', parentId).single();
+
+    const { data: warehouse, error } = await supabase.from('companies').insert({
+      name: data.name,
+      parent_id: parentId,
+      cnpj: data.cnpj || (parent ? `${parent.cnpj}-FILIAL` : `FILIAL-${Math.random().toString(36).slice(-4)}`),
+      sector_responsible: data.responsibleName,
+      sector_email: data.responsibleEmail,
+      email: data.responsibleEmail,
+      status: 'Pendente',
+      sector_name: 'Geral'
+    }).select().single();
+
+    if (error) throw error;
+
+    return {
+      id: warehouse.id,
+      cnpj: warehouse.cnpj,
+      name: warehouse.name,
+      address: warehouse.address,
+      email: warehouse.email,
+      phone: warehouse.phone,
+      logo: warehouse.logo,
+      sectorName: warehouse.sector_name,
+      sectorResponsible: warehouse.sector_responsible,
+      sectorWhatsApp: warehouse.sector_whatsapp,
+      sectorEmail: warehouse.sector_email,
+      contactExtra: warehouse.contact_extra,
+      settings: warehouse.settings,
+      status: warehouse.status,
+      suspensionReason: warehouse.status_reason,
+      planId: warehouse.plan_id,
+      createdAt: warehouse.created_at,
+      parentId: warehouse.parent_id
+    };
   },
 
   async logout() {

@@ -1,7 +1,7 @@
 import { Resend } from 'resend';
 import { supabase } from './supabaseClient';
 
-const RESEND_API_KEY = import.meta.env.VITE_RESEND_API_KEY;
+const RESEND_API_KEY = (import.meta as any).env.VITE_RESEND_API_KEY;
 
 export interface EmailPayload {
   to: string | string[];
@@ -466,6 +466,37 @@ export const EmailService = {
     `;
 
     const html = generateEmailTemplate('Convite de Parceiro', content, accentColor);
+    return this.sendEmail({ to: email, subject, html });
+  },
+
+  async sendWarehouseInvitation(email: string, warehouseName: string, parentCompanyName: string, warehouseId: string) {
+    const subject = `🚀 Convite: Gestão do Almoxarifado ${warehouseName}`;
+    const accentColor = '#2563eb';
+    const registrationLink = `${getBaseUrl()}/#/registro-unidade?email=${encodeURIComponent(email)}&companyId=${encodeURIComponent(warehouseId)}&name=${encodeURIComponent(warehouseName)}`;
+
+    const content = `
+      <p style="margin-top: 0; font-size: 16px; line-height: 1.6; color: #374151;">
+        Olá! Você foi convidado para gerenciar a nova unidade <strong>${warehouseName}</strong> da empresa <strong>${parentCompanyName}</strong> na Aura.
+      </p>
+
+      <div style="background-color: #f3f4f6; border-radius: 12px; padding: 24px; margin: 24px 0;">
+         <p style="margin: 0; font-size: 11px; text-transform: uppercase; color: #6b7280; font-weight: 700; letter-spacing: 0.5px;">Nova Unidade</p>
+         <p style="margin: 4px 0 0; font-size: 18px; font-weight: 700; color: #1f2937;">${warehouseName}</p>
+         <p style="margin: 2px 0 0; font-size: 12px; color: #6b7280;">Organização: ${parentCompanyName}</p>
+      </div>
+
+      <div style="text-align: center; margin: 32px 0;">
+        <a href="${registrationLink}" style="background-color: #2563eb; color: #ffffff; padding: 16px 32px; border-radius: 12px; font-weight: 800; text-decoration: none; display: inline-block; text-transform: uppercase; font-size: 14px; letter-spacing: 1px; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);">
+          Aceitar Convite e Configurar Acesso
+        </a>
+      </div>
+
+      <p style="font-size: 14px; color: #6b7280; line-height: 1.5;">
+        Ao aceitar, você poderá criar sua senha e acessar o painel exclusivo desta unidade. Todos os dados desta unidade pertencerão à organização ${parentCompanyName}.
+      </p>
+    `;
+
+    const html = generateEmailTemplate('Convite de Unidade', content, accentColor);
     return this.sendEmail({ to: email, subject, html });
   }
 };

@@ -124,9 +124,10 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
   const [formData, setFormData] = useState({ name: '', email: '', password: '', accessCode: '', magicEmail: '' });
   const [registerData, setRegisterData] = useState({ name: '', email: '', password: '', confirmPassword: '', companyName: '', cnpj: '', address: '', phone: '', contactEmail: '' });
 
-  // Track if email/CNPJ came from URL (should be readonly)
   const [emailFromUrl, setEmailFromUrl] = useState(false);
   const [cnpjFromUrl, setCnpjFromUrl] = useState(false);
+  const [warehouseInvitationId, setWarehouseInvitationId] = useState<string | null>(null);
+  const [isWarehouseInvitation, setIsWarehouseInvitation] = useState(false);
 
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
@@ -194,6 +195,17 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
         setCnpjFromUrl(true);
         fetchCNPJData(cnpjParam);
       }
+    }
+
+    // Check for Warehouse Invitation
+    const invitationId = searchParams.get('invitationId') || hashParamsFromUrl.get('invitationId');
+    const type = searchParams.get('type') || hashParamsFromUrl.get('type');
+
+    if (type === 'warehouse' && invitationId) {
+      setAuthMode('onboarding');
+      setIsWarehouseInvitation(true);
+      setWarehouseInvitationId(invitationId);
+      setOnboardingStep(2); // Jump to credentials step
     }
 
     // 2. Check Auth Errors/Callbacks
@@ -336,15 +348,33 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
       if (onboardingStep === 2) {
         if (registerData.password !== registerData.confirmPassword) { setError("Senhas não coincidem."); return; }
         if (passwordStrength < 3) { setError("Senha muito fraca."); return; }
-        setOnboardingStep(3); setError(null);
+
+        if (isWarehouseInvitation) {
+          // Finish for warehouse invitation
+          setLoading(true); setError(null);
+          try {
+            await db.registerWarehouseAdmin(
+              { name: registerData.name, email: registerData.email, password: registerData.password },
+              warehouseInvitationId!
+            );
+            setAuthMode('login');
+            setSuccessMessage("Conta criada com sucesso! Você já pode entrar.");
+          } catch (err: any) {
+            setError(err.message || "Erro ao criar conta de almoxarifado.");
+          } finally { setLoading(false); }
+        } else {
+          setOnboardingStep(3);
+          setError(null);
+        }
       } else if (onboardingStep === 3) {
         setLoading(true); setError(null);
         try {
-          const user = await db.register(
+          await db.register(
             { name: registerData.name, email: registerData.email, password: registerData.password },
             { cnpj: registerData.cnpj.replace(/\D/g, ''), name: registerData.companyName, address: registerData.address, email: registerData.contactEmail, phone: registerData.phone, sectorName: 'Geral', sectorResponsible: registerData.name }
           );
-          onLogin(user);
+          setAuthMode('login');
+          setSuccessMessage("Conta criada com sucesso! Faça login para começar.");
         } catch (err: any) {
           console.error('Erro no registro:', err);
           setError(err.message || "Erro ao criar conta.");

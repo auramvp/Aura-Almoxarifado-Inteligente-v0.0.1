@@ -63,6 +63,7 @@ export interface Company {
   suspensionReason?: string;
   planId?: string;
   createdAt: string;
+  parentId?: string;
 }
 
 export interface CompanySettings {
