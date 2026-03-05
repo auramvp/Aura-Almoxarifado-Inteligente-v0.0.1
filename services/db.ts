@@ -312,7 +312,8 @@ export const db = {
       sector_responsible: companyData.sectorResponsible,
       sector_whatsapp: companyData.sectorWhatsApp,
       sector_email: companyData.sectorEmail,
-      contact_extra: companyData.contactExtra
+      contact_extra: companyData.contactExtra,
+      plan_id: companyData.plan_id
     }, { onConflict: 'cnpj' }).select().single();
 
     if (compErr) throw compErr;

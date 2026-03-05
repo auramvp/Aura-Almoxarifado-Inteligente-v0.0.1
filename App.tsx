@@ -127,6 +127,7 @@ const AuthScreen = ({ onLogin, initialMode = 'login', onPasswordUpdated }: { onL
 
   const [emailFromUrl, setEmailFromUrl] = useState(false);
   const [cnpjFromUrl, setCnpjFromUrl] = useState(false);
+  const [planFromUrl, setPlanFromUrl] = useState<string | null>(null);
   const [warehouseInvitationId, setWarehouseInvitationId] = useState<string | null>(null);
   const [isWarehouseInvitation, setIsWarehouseInvitation] = useState(false);
 
@@ -167,6 +168,11 @@ const AuthScreen = ({ onLogin, initialMode = 'login', onPasswordUpdated }: { onL
     const flowParam = searchParams.get('flow') || hashParamsFromUrl.get('flow');
     const cnpjParam = searchParams.get('cnpj') || hashParamsFromUrl.get('cnpj');
     const nameParam = searchParams.get('name') || hashParamsFromUrl.get('name');
+    const planParam = searchParams.get('plan') || hashParamsFromUrl.get('plan');
+
+    if (planParam === 'free') {
+      setPlanFromUrl('free');
+    }
 
     if (emailParam) {
       setAuthMode('register');
@@ -185,6 +191,9 @@ const AuthScreen = ({ onLogin, initialMode = 'login', onPasswordUpdated }: { onL
         setCnpjFromUrl(true);
         fetchCNPJData(cnpjParam);
       }
+    } else if (flowParam === 'register') {
+      setAuthMode('register');
+      setRegisterStep(1); // Forçar etapa 1 se for plano gratuito ou via link direto
     } else if (flowParam === 'onboarding') {
       setAuthMode('onboarding');
       setOnboardingStep(1);
@@ -234,6 +243,15 @@ const AuthScreen = ({ onLogin, initialMode = 'login', onPasswordUpdated }: { onL
   }, []);
 
   const checkSubscription = async (email: string) => {
+    if (planFromUrl === 'free') {
+      if (authMode === 'onboarding') {
+        setOnboardingStep(2);
+      } else {
+        setRegisterStep(1);
+      }
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -355,7 +373,16 @@ const AuthScreen = ({ onLogin, initialMode = 'login', onPasswordUpdated }: { onL
         try {
           await db.register(
             { name: registerData.name, email: registerData.email, password: registerData.password },
-            { cnpj: registerData.cnpj.replace(/\D/g, ''), name: registerData.companyName, address: registerData.address, email: registerData.contactEmail, phone: registerData.phone, sectorName: 'Geral', sectorResponsible: registerData.name }
+            {
+              cnpj: registerData.cnpj.replace(/\D/g, ''),
+              name: registerData.companyName,
+              address: registerData.address,
+              email: registerData.contactEmail,
+              phone: registerData.phone,
+              sectorName: 'Geral',
+              sectorResponsible: registerData.name,
+              plan_id: planFromUrl === 'free' ? '0637157e-b929-4c3b-8c47-c47502e27c87' : null
+            }
           );
           setAuthMode('login');
           setSuccessMessage("Conta criada com sucesso! Faça login para começar.");
@@ -375,7 +402,16 @@ const AuthScreen = ({ onLogin, initialMode = 'login', onPasswordUpdated }: { onL
         try {
           const user = await db.register(
             { name: registerData.name, email: registerData.email, password: registerData.password },
-            { cnpj: registerData.cnpj.replace(/\D/g, ''), name: registerData.companyName, address: registerData.address, email: registerData.contactEmail, phone: registerData.phone, sectorName: 'Geral', sectorResponsible: registerData.name }
+            {
+              cnpj: registerData.cnpj.replace(/\D/g, ''),
+              name: registerData.companyName,
+              address: registerData.address,
+              email: registerData.contactEmail,
+              phone: registerData.phone,
+              sectorName: 'Geral',
+              sectorResponsible: registerData.name,
+              plan_id: planFromUrl === 'free' ? '0637157e-b929-4c3b-8c47-c47502e27c87' : null
+            }
           );
           onLogin(user);
         } catch (err: any) {
