@@ -5,7 +5,7 @@ import {
   Warehouse, FileUp, LogOut, Truck, Sun, Moon,
   ChevronLeft, ChevronRight, Building2, User as UserIcon,
   Loader2, AlertCircle, CheckCircle, Sparkles, Eye, EyeOff, Users,
-  Mail, Lock, ShoppingCart, KeyRound, LifeBuoy, MapPin
+  Mail, Lock, ShoppingCart, KeyRound, LifeBuoy, MapPin, MessageCircle
 } from 'lucide-react';
 import { db, supabase, MODULE_MAPPING } from './services/db.ts';
 import { User, UserRole, Company, Subscription } from './types.ts';
@@ -123,7 +123,7 @@ const AuthScreen = ({ onLogin, initialMode = 'login', onPasswordUpdated }: { onL
   const TURNSTILE_SITE_KEY = "0x4AAAAAACaSmlBs51Op_RRa";
 
   const [formData, setFormData] = useState({ name: '', email: '', password: '', accessCode: '' });
-  const [registerData, setRegisterData] = useState({ name: '', email: '', password: '', confirmPassword: '', companyName: '', cnpj: '', address: '', phone: '', contactEmail: '' });
+  const [registerData, setRegisterData] = useState({ name: '', email: '', password: '', confirmPassword: '', companyName: '', cnpj: '', address: '', phone: '', whatsapp: '', contactEmail: '' });
 
   const [emailFromUrl, setEmailFromUrl] = useState(false);
   const [cnpjFromUrl, setCnpjFromUrl] = useState(false);
@@ -382,6 +382,7 @@ const AuthScreen = ({ onLogin, initialMode = 'login', onPasswordUpdated }: { onL
               address: registerData.address,
               email: registerData.contactEmail,
               phone: registerData.phone,
+              sectorWhatsApp: registerData.whatsapp,
               sectorName: 'Geral',
               sectorResponsible: registerData.name,
               plan_id: planFromUrl === 'free' ? '0637157e-b929-4c3b-8c47-c47502e27c87' : null
@@ -411,6 +412,7 @@ const AuthScreen = ({ onLogin, initialMode = 'login', onPasswordUpdated }: { onL
               address: registerData.address,
               email: registerData.contactEmail,
               phone: registerData.phone,
+              sectorWhatsApp: registerData.whatsapp,
               sectorName: 'Geral',
               sectorResponsible: registerData.name,
               plan_id: planFromUrl === 'free' ? '0637157e-b929-4c3b-8c47-c47502e27c87' : null
@@ -618,6 +620,7 @@ const AuthScreen = ({ onLogin, initialMode = 'login', onPasswordUpdated }: { onL
                       <div className="relative"><Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input required type="text" placeholder="CNPJ da Empresa" readOnly={cnpjFromUrl} className={inputClass} value={registerData.cnpj} onChange={e => !cnpjFromUrl && setRegisterData({ ...registerData, cnpj: formatCNPJ(e.target.value) })} onBlur={() => !cnpjFromUrl && handleCNPJBlur()} /></div>
                       <div className="relative"><Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input required type="text" placeholder="Nome Fantasia / Razão Social" className={inputClass} value={registerData.companyName} onChange={e => setRegisterData({ ...registerData, companyName: e.target.value })} /></div>
                       <div className="relative"><MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input required type="text" placeholder="Endereço (opcional)" className={inputClass} value={registerData.address} onChange={e => setRegisterData({ ...registerData, address: e.target.value })} /></div>
+                      <div className="relative"><MessageCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input required type="text" placeholder="WhatsApp do Responsável" className={inputClass} value={registerData.whatsapp} onChange={e => setRegisterData({ ...registerData, whatsapp: e.target.value })} /></div>
                     </div>
                   ) : (
                     <div className="space-y-4 animate-in slide-in-from-right-4 duration-500">
@@ -629,6 +632,10 @@ const AuthScreen = ({ onLogin, initialMode = 'login', onPasswordUpdated }: { onL
                         <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">
                           <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">E-mail</p>
                           <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{registerData.email}</p>
+                        </div>
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">WhatsApp</p>
+                          <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{registerData.whatsapp || 'Não informado'}</p>
                         </div>
                         <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 col-span-2">
                           <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Empresa</p>
