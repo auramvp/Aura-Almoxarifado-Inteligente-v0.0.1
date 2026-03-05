@@ -369,6 +369,9 @@ const AuthScreen = ({ onLogin, initialMode = 'login', onPasswordUpdated }: { onL
           setError(null);
         }
       } else if (onboardingStep === 3) {
+        setOnboardingStep(4);
+        setError(null);
+      } else if (onboardingStep === 4) {
         setLoading(true); setError(null);
         try {
           await db.register(
@@ -485,7 +488,7 @@ const AuthScreen = ({ onLogin, initialMode = 'login', onPasswordUpdated }: { onL
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
       <AuraBackground />
 
-      <div className="w-full max-w-sm space-y-4 relative z-10 animate-in fade-in zoom-in duration-700">
+      <div className={`w-full ${authMode === 'onboarding' ? 'max-w-4xl' : 'max-w-sm'} space-y-4 relative z-10 animate-in fade-in zoom-in duration-700`}>
         <div className="flex justify-center mb-1"><Logo collapsed={false} size="lg" /></div>
 
         <div className="bg-white dark:bg-slate-900 rounded-[28px] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
@@ -542,43 +545,112 @@ const AuthScreen = ({ onLogin, initialMode = 'login', onPasswordUpdated }: { onL
               )}
             </div>
           ) : authMode === 'onboarding' ? (
-            <div className="p-6">
-              <form onSubmit={e => handleRegister(e)} className="space-y-4">
-                <div className="flex justify-between items-end mb-2">
-                  <h3 className="text-lg font-bold">Configurar Acesso</h3>
-                  <span className="text-[10px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-full uppercase tracking-widest leading-none">Etapa {onboardingStep}/3</span>
+            <div className="flex flex-col lg:flex-row min-h-[500px]">
+              {/* Sidebar de Instruções */}
+              <div className="lg:w-1/3 bg-blue-600 p-8 text-white hidden lg:flex flex-col justify-between">
+                <div>
+                  <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-6">
+                    <Sparkles size={24} />
+                  </div>
+                  <h3 className="text-2xl font-black uppercase leading-tight mb-6">Comece sua jornada com a Aura</h3>
+
+                  <div className="space-y-6">
+                    {[
+                      { step: 1, title: 'Validação', desc: 'Verificamos seu e-mail de acesso.' },
+                      { step: 2, title: 'Perfil', desc: 'Sua identificação e senha pessoal.' },
+                      { step: 3, title: 'Empresa', desc: 'Dados fundamentais do seu almoxarifado.' },
+                      { step: 4, title: 'Revisão', desc: 'Confira os dados antes de finalizar.' }
+                    ].map((s) => (
+                      <div key={s.step} className={`flex gap-4 transition-all duration-500 ${onboardingStep === s.step ? 'opacity-100 scale-105' : 'opacity-40 scale-95'}`}>
+                        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center font-black text-sm shrink-0 ${onboardingStep === s.step ? 'bg-white text-blue-600 border-white' : 'border-white/40 text-white'}`}>
+                          {onboardingStep > s.step ? '✓' : s.step}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-black text-xs uppercase tracking-widest leading-none mb-1">{s.title}</p>
+                          <p className="text-[10px] font-medium text-blue-100 leading-tight">{s.desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                {error && <div className="p-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-bold border border-red-100 flex items-center gap-2"><AlertCircle size={14} /> {error}</div>}
-                {onboardingStep === 1 ? (
-                  <div className="space-y-4">
-                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 rounded-xl">
-                      <p className="text-[10px] leading-relaxed text-blue-700 dark:text-blue-300 font-medium">Use o e-mail da sua compra para validar seu acesso.</p>
-                    </div>
-                    <div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="email" placeholder="E-mail da Compra" className={inputClass} value={registerData.email} onChange={e => setRegisterData({ ...registerData, email: e.target.value })} /></div>
-                    <TurnstileWidget siteKey={TURNSTILE_SITE_KEY} onVerify={setTurnstileToken} onExpire={() => setTurnstileToken(null)} />
-                  </div>
-                ) : onboardingStep === 2 ? (
-                  <div className="space-y-3">
-                    <div className="relative"><UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="Nome Completo" className={inputClass} value={registerData.name} onChange={e => setRegisterData({ ...registerData, name: e.target.value })} /></div>
-                    <div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="password" placeholder="Criar Senha" className={inputClass} value={registerData.password} onChange={e => setRegisterData({ ...registerData, password: e.target.value })} /></div>
-                    <div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="password" placeholder="Confirmar Senha" className={inputClass} value={registerData.confirmPassword} onChange={e => setRegisterData({ ...registerData, confirmPassword: e.target.value })} /></div>
-                    <div className="flex gap-1 px-1">
-                      {[1, 2, 3, 4].map((s) => (
-                        <div key={s} className={`h-1 flex-1 rounded-full transition-all duration-500 ${s <= passwordStrength ? strengthColor : 'bg-slate-100 dark:bg-slate-800'}`} />
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="relative"><Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="CNPJ" readOnly={cnpjFromUrl} className={inputClass} value={registerData.cnpj} onChange={e => !cnpjFromUrl && setRegisterData({ ...registerData, cnpj: formatCNPJ(e.target.value) })} onBlur={() => !cnpjFromUrl && handleCNPJBlur()} /></div>
-                    <div className="relative"><Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input required type="text" placeholder="Empresa" className={inputClass} value={registerData.companyName} onChange={e => setRegisterData({ ...registerData, companyName: e.target.value })} /></div>
-                  </div>
-                )}
-                <div className="flex gap-2">
-                  {onboardingStep > 1 && <button type="button" onClick={() => setOnboardingStep(prev => prev - 1)} className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all">Voltar</button>}
-                  <button type="submit" disabled={loading} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg shadow-blue-500/20 transition-all">{loading ? <Loader2 className="animate-spin mx-auto" size={16} /> : onboardingStep < 3 ? 'Continuar' : 'Finalizar'}</button>
+
+                <div className="pt-6 border-t border-white/20">
+                  <p className="text-[9px] font-bold uppercase tracking-[2px] opacity-60">Passo a passo exclusivo</p>
                 </div>
-              </form>
+              </div>
+
+              {/* Área do Formulário */}
+              <div className="flex-1 p-6 lg:p-10 bg-white dark:bg-slate-900 flex flex-col justify-center">
+                <form onSubmit={e => handleRegister(e)} className="space-y-4">
+                  <div className="flex justify-between items-end mb-4">
+                    <h3 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">
+                      {onboardingStep === 4 ? 'Revisão dos Dados' : 'Configurar Acesso'}
+                    </h3>
+                    <span className="text-[10px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-3 py-1 rounded-full uppercase tracking-widest leading-none">Etapa {onboardingStep}/4</span>
+                  </div>
+
+                  {error && <div className="p-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-bold border border-red-100 flex items-center gap-2 mb-4 animate-in shake-in duration-300"><AlertCircle size={14} /> {error}</div>}
+
+                  {onboardingStep === 1 ? (
+                    <div className="space-y-4 animate-in slide-in-from-right-4 duration-500">
+                      <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 rounded-2xl">
+                        <p className="text-xs leading-relaxed text-blue-700 dark:text-blue-300 font-bold">Olá! {planFromUrl === 'free' ? 'Você está iniciando no Plano Gratuito.' : 'Use o e-mail da sua compra para validar seu acesso.'}</p>
+                      </div>
+                      <div className="relative">
+                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <input required type="email" placeholder="E-mail de Cadastro" className={inputClass} value={registerData.email} onChange={e => setRegisterData({ ...registerData, email: e.target.value })} />
+                      </div>
+                      <TurnstileWidget siteKey={TURNSTILE_SITE_KEY} onVerify={setTurnstileToken} onExpire={() => setTurnstileToken(null)} />
+                    </div>
+                  ) : onboardingStep === 2 ? (
+                    <div className="space-y-4 animate-in slide-in-from-right-4 duration-500">
+                      <div className="relative"><UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input required type="text" placeholder="Seu Nome Completo" className={inputClass} value={registerData.name} onChange={e => setRegisterData({ ...registerData, name: e.target.value })} /></div>
+                      <div className="relative"><Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input required type="password" placeholder="Crie uma Senha Forte" className={inputClass} value={registerData.password} onChange={e => setRegisterData({ ...registerData, password: e.target.value })} /></div>
+                      <div className="relative"><Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input required type="password" placeholder="Confirme sua Senha" className={inputClass} value={registerData.confirmPassword} onChange={e => setRegisterData({ ...registerData, confirmPassword: e.target.value })} /></div>
+                      <div className="flex gap-1.5 px-2">
+                        {[1, 2, 3, 4].map((s) => (
+                          <div key={s} className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${s <= passwordStrength ? strengthColor : 'bg-slate-100 dark:bg-slate-800'}`} />
+                        ))}
+                      </div>
+                    </div>
+                  ) : onboardingStep === 3 ? (
+                    <div className="space-y-4 animate-in slide-in-from-right-4 duration-500">
+                      <div className="relative"><Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input required type="text" placeholder="CNPJ da Empresa" readOnly={cnpjFromUrl} className={inputClass} value={registerData.cnpj} onChange={e => !cnpjFromUrl && setRegisterData({ ...registerData, cnpj: formatCNPJ(e.target.value) })} onBlur={() => !cnpjFromUrl && handleCNPJBlur()} /></div>
+                      <div className="relative"><Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input required type="text" placeholder="Nome Fantasia / Razão Social" className={inputClass} value={registerData.companyName} onChange={e => setRegisterData({ ...registerData, companyName: e.target.value })} /></div>
+                      <div className="relative"><MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input required type="text" placeholder="Endereço (opcional)" className={inputClass} value={registerData.address} onChange={e => setRegisterData({ ...registerData, address: e.target.value })} /></div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4 animate-in slide-in-from-right-4 duration-500">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Responsável</p>
+                          <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{registerData.name}</p>
+                        </div>
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">E-mail</p>
+                          <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{registerData.email}</p>
+                        </div>
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 col-span-2">
+                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Empresa</p>
+                          <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{registerData.companyName}</p>
+                          <p className="text-[10px] text-slate-500 mt-1 font-mono">{registerData.cnpj}</p>
+                        </div>
+                        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800/50 col-span-2">
+                          <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-1">Plano Selecionado</p>
+                          <p className="text-xs font-black text-blue-600 dark:text-blue-400 uppercase">{planFromUrl === 'free' ? 'Plano Gratuito' : 'Plano Assinado'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-3 pt-6">
+                    {onboardingStep > 1 && <button type="button" onClick={() => setOnboardingStep(prev => prev - 1)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all active:scale-95">Voltar</button>}
+                    <button type="submit" disabled={loading} className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-blue-500/20 transition-all active:scale-95 flex items-center justify-center gap-2">
+                      {loading ? <Loader2 className="animate-spin" size={18} /> : (onboardingStep < 4 ? 'Continuar' : 'Finalizar e Acessar')}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           ) : authMode === 'forgotPassword' ? (
             <div className="p-6 space-y-4">
