@@ -17,28 +17,35 @@ const normalize = (str: string | undefined): string => {
 };
 
 // Feature mapping from Plan.features to internal module IDs
-export type SystemModule = 'inventory' | 'reports' | 'ai' | 'purchases' | 'sectors' | 'suppliers' | 'support' | 'import' | 'units';
+export type SystemModule = 'inventory' | 'movements' | 'reports' | 'ai' | 'purchases' | 'sectors' | 'suppliers' | 'support' | 'import' | 'units';
 
 export const MODULE_MAPPING: Record<string, SystemModule> = {
-  'Controle de Estoque Básico': 'inventory',
-  'Controle Avançado': 'inventory',
-  'IA Otimizadora': 'ai',
-  'IA Premium': 'ai',
-  'Relatórios Simples': 'reports',
-  'Relatórios Avançados': 'reports',
-  'Suporte Prioritário': 'support',
-  'API Dedicada': 'purchases',
-  'Gestor de Contas': 'support',
-  'Ilimitado': 'inventory',
-  'Histórico básico': 'inventory',
-  'Dashboard simples': 'inventory',
-  'Alerta de estoque mínimo': 'inventory',
-  'Dashboard básico': 'inventory',
-  'Relatórios de movimentação': 'reports',
-  'Dashboard de consumo': 'reports',
-  'Exportação de relatórios': 'reports',
-  'Dashboard avançado': 'reports',
-  'Múltiplos almoxarifados': 'units'
+  'cadastro de itens': 'inventory',
+  'cadastro completo de itens': 'inventory',
+  'entrada e saída de materiais': 'inventory',
+  'estoque': 'inventory',
+  'produtos': 'inventory',
+  'inventário de estoque': 'inventory',
+  'inventário avançado': 'inventory',
+  'histórico básico de movimentações': 'movements',
+  'histórico de movimentações': 'movements',
+  'histórico completo': 'movements',
+  'movimentações': 'movements',
+  'relatórios de movimentação': 'reports',
+  'relatórios completos': 'reports',
+  'exportação de relatórios': 'reports',
+  'dashboard simples': 'inventory',
+  'dashboard básico': 'inventory',
+  'dashboard de consumo': 'reports',
+  'dashboard avançado': 'reports',
+  'alerta de estoque mínimo': 'inventory',
+  'controle de responsáveis por retirada': 'sectors',
+  'ia otimizadora': 'ai',
+  'ia premium': 'ai',
+  'múltiplo': 'units',
+  'múltiplos almoxarifados': 'units',
+  'suporte prioritário': 'support',
+  'gestor de contas': 'support'
 };
 
 export const PLAN_LIMITS = {
@@ -1425,8 +1432,11 @@ export const db = {
 
   async canAccessModule(companyId: string, moduleId: SystemModule): Promise<boolean> {
     const sub = await this.getSubscription(companyId);
+
+    // Core modules always accessible (basic versions)
+    if (moduleId === 'inventory' || moduleId === 'movements' || moduleId === 'suppliers' || moduleId === 'sectors') return true;
+
     if (!sub?.plan?.features || sub.plan.features.length === 0) {
-      if (moduleId === 'inventory') return true;
       return false;
     }
 
@@ -1434,10 +1444,10 @@ export const db = {
     if (normalizedPlanName.includes('partners') || normalizedPlanName.includes('enterprise') || normalizedPlanName.includes('intelligence')) return true;
 
     return sub.plan.features.some(feature => {
-      const f = feature.toLowerCase();
+      const f = feature.toLowerCase().trim();
       if (f.includes('ilimitado') || f.includes('unlimited') || f.includes('todos os módulos')) return true;
 
-      const mappedModule = MODULE_MAPPING[feature];
+      const mappedModule = MODULE_MAPPING[f];
       if (mappedModule) return mappedModule === moduleId;
 
       // Plan Name fallback for specific module access
