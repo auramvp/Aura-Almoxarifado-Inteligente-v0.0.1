@@ -49,6 +49,7 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
   const [users, setUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [productsCount, setProductsCount] = useState(0);
+  const [warehousesCount, setWarehousesCount] = useState(0);
 
   const defaultPermissions: UserPermissions = {
     products: 'view',
@@ -167,9 +168,11 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
       const sub = await db.getSubscription(company.id);
       const invs = await db.getInvoices(company.id);
       const pCount = await db.getProductsCount(company.id);
+      const wCount = await db.getWarehousesCount(company.id);
       setSubscription(sub);
       setInvoices(invs);
       setProductsCount(pCount);
+      setWarehousesCount(wCount);
     } catch (error) {
       console.error('Error loading subscription:', error);
     } finally {
@@ -421,15 +424,13 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
             <Users size={18} />
             <span className="font-bold text-sm">Usuários</span>
           </button>
-          {!isBranch && (
-            <button
-              onClick={() => setActiveTab('billing')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'billing' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white dark:bg-slate-900 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
-            >
-              <CreditCard size={18} />
-              <span className="font-bold text-sm">Assinatura e Faturas</span>
-            </button>
-          )}
+          <button
+            onClick={() => setActiveTab('billing')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'billing' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white dark:bg-slate-900 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+          >
+            <Plus size={18} className="rotate-45" />
+            <span className="font-bold text-sm">Assinatura e Uso</span>
+          </button>
           <button
             onClick={() => setActiveTab('alerts')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'alerts' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white dark:bg-slate-900 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
@@ -916,11 +917,11 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                         <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm border border-white/10">
                           <div className="flex justify-between items-end mb-2">
                             <p className="text-[10px] uppercase tracking-widest opacity-70">Usuários</p>
-                            <p className="text-[10px] font-bold">{users.length} / {subscription.plan?.maxUsers === 999 ? '∞' : subscription.plan?.maxUsers}</p>
+                            <p className="text-[10px] font-bold">{users.length} / {subscription.plan?.maxUsers === 9999 ? '∞' : subscription.plan?.maxUsers}</p>
                           </div>
                           <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
                             <div
@@ -931,13 +932,25 @@ const Settings: React.FC<SettingsProps> = ({ user, company }) => {
                         </div>
                         <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm border border-white/10">
                           <div className="flex justify-between items-end mb-2">
-                            <p className="text-[10px] uppercase tracking-widest opacity-70">Cadastro de Itens</p>
+                            <p className="text-[10px] uppercase tracking-widest opacity-70">Itens Ativos</p>
                             <p className="text-[10px] font-bold">{productsCount} / {subscription.plan?.maxItems === 9999 ? '∞' : subscription.plan?.maxItems}</p>
                           </div>
                           <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
                             <div
                               className="h-full bg-white transition-all duration-1000"
                               style={{ width: `${Math.min(100, (productsCount / (subscription.plan?.maxItems || 1)) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                        <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm border border-white/10">
+                          <div className="flex justify-between items-end mb-2">
+                            <p className="text-[10px] uppercase tracking-widest opacity-70">Almoxarifados</p>
+                            <p className="text-[10px] font-bold">{warehousesCount} / {subscription.plan?.maxWarehouses === 9999 ? '∞' : subscription.plan?.maxWarehouses}</p>
+                          </div>
+                          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-white transition-all duration-1000"
+                              style={{ width: `${Math.min(100, (warehousesCount / (subscription.plan?.maxWarehouses || 1)) * 100)}%` }}
                             />
                           </div>
                         </div>

@@ -84,6 +84,7 @@ export interface Plan {
   name: string;
   maxUsers: number;
   maxItems: number;
+  maxWarehouses: number;
   price: number;
   interval: 'monthly' | 'yearly';
   features?: string[];

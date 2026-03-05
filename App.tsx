@@ -837,11 +837,17 @@ const SidebarNavigation = ({ user, setSidebarOpen, collapsed }: any) => {
   const location = useLocation();
   const isAlmoxarife = user.role === UserRole.ALMOXARIFE;
 
-  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [access, setAccess] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (user?.companyId) {
-      db.getSubscription(user.companyId).then(setSubscription);
+      const modules: SystemModule[] = ['inventory', 'reports', 'ai', 'purchases', 'sectors', 'suppliers', 'support', 'units'];
+      Promise.all(modules.map(m => db.canAccessModule(user.companyId, m)))
+        .then(results => {
+          const newAccess: Record<string, boolean> = {};
+          modules.forEach((m, i) => { newAccess[m] = results[i]; });
+          setAccess(newAccess);
+        });
     }
   }, [user]);
 
@@ -854,25 +860,8 @@ const SidebarNavigation = ({ user, setSidebarOpen, collapsed }: any) => {
       hasPermission = user.permissions[module] && user.permissions[module] !== 'none';
     }
 
-    // 2. Plan-based check (Modules)
-    if (!subscription) return hasPermission; // Allow while loading, or handle differently
-
     const planModule = module === 'products' ? 'inventory' : (module as SystemModule);
-
-    // Check features
-    const features = subscription.plan?.features || [];
-    if (features.length === 0) return planModule === 'inventory' ? hasPermission : false;
-
-    const normalizedPlanName = subscription.plan.name.toLowerCase();
-    if (normalizedPlanName.includes('partners') || normalizedPlanName.includes('enterprise')) return hasPermission;
-
-    const isAllowedByPlan = features.some(feature => {
-      const f = feature.toLowerCase();
-      if (f.includes('ilimitado') || f.includes('unlimited') || f.includes('todos os módulos')) return true;
-      return MODULE_MAPPING[feature] === planModule;
-    });
-
-    return hasPermission && isAllowedByPlan;
+    return hasPermission && (access[planModule] ?? true);
   };
 
   return (

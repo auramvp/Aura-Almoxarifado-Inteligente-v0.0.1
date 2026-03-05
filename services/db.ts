@@ -17,7 +17,7 @@ const normalize = (str: string | undefined): string => {
 };
 
 // Feature mapping from Plan.features to internal module IDs
-export type SystemModule = 'inventory' | 'reports' | 'ai' | 'purchases' | 'sectors' | 'suppliers' | 'support';
+export type SystemModule = 'inventory' | 'reports' | 'ai' | 'purchases' | 'sectors' | 'suppliers' | 'support' | 'import' | 'units';
 
 export const MODULE_MAPPING: Record<string, SystemModule> = {
   'Controle de Estoque Básico': 'inventory',
@@ -29,7 +29,24 @@ export const MODULE_MAPPING: Record<string, SystemModule> = {
   'Suporte Prioritário': 'support',
   'API Dedicada': 'purchases',
   'Gestor de Contas': 'support',
-  'Ilimitado': 'inventory'
+  'Ilimitado': 'inventory',
+  'Histórico básico': 'inventory',
+  'Dashboard simples': 'inventory',
+  'Alerta de estoque mínimo': 'inventory',
+  'Dashboard básico': 'inventory',
+  'Relatórios de movimentação': 'reports',
+  'Dashboard de consumo': 'reports',
+  'Exportação de relatórios': 'reports',
+  'Dashboard avançado': 'reports',
+  'Múltiplos almoxarifados': 'units'
+};
+
+export const PLAN_LIMITS = {
+  'Gratuito': { maxItems: 50, maxUsers: 1, maxWarehouses: 1 },
+  'Starter': { maxItems: 200, maxUsers: 2, maxWarehouses: 1 },
+  'Pro': { maxItems: 500, maxUsers: 3, maxWarehouses: 1 },
+  'Business': { maxItems: 1000, maxUsers: 5, maxWarehouses: 1 },
+  'Intelligence': { maxItems: 3000, maxUsers: 9999, maxWarehouses: 9999 }
 };
 
 // Cache de assinaturas para evitar múltiplas chamadas lentas (TTL de 30s)
@@ -565,6 +582,15 @@ export const db = {
   },
 
   async addWarehouse(parentId: string, data: { name: string, responsibleName: string, responsibleEmail: string, cnpj?: string }): Promise<Company> {
+    const sub = await this.getSubscription(parentId);
+    if (sub?.plan) {
+      const count = await this.getWarehousesCount(parentId);
+      // Intelligence has 9999 limit in PLAN_LIMITS, others have 1.
+      if (count >= sub.plan.maxWarehouses) {
+        throw new Error(`Limite de unidades atingido para o seu plano (${sub.plan.maxWarehouses}). Faça upgrade para o plano Intelligence para ter múltiplas unidades.`);
+      }
+    }
+
     // Buscar dados da matriz para replicar CNPJ se não informado (ou base do CNPJ)
     const { data: parent } = await supabase.from('companies').select('*').eq('id', parentId).single();
 
@@ -601,6 +627,11 @@ export const db = {
       createdAt: warehouse.created_at,
       parentId: warehouse.parent_id
     };
+  },
+
+  async getWarehousesCount(parentId: string): Promise<number> {
+    const { count } = await supabase.from('companies').select('*', { count: 'exact', head: true }).eq('parent_id', parentId);
+    return (count || 0) + 1; // +1 to include the main unit
   },
 
   async logout() {
@@ -668,6 +699,9 @@ export const db = {
 
     if (!planData && !sub) return null;
 
+    const planName = planData?.name || sub?.plan || 'Gratuito';
+    const limits = PLAN_LIMITS[planName as keyof typeof PLAN_LIMITS] || PLAN_LIMITS['Gratuito'];
+
     const subscription: Subscription = {
       id: sub?.id || 'manual-' + companyId,
       companyId: companyId,
@@ -678,9 +712,10 @@ export const db = {
       paymentMethod: sub?.payment_method || 'PIX',
       plan: {
         id: planData?.id || '',
-        name: planData?.name || sub?.plan || 'Plano Personalizado',
-        maxUsers: planData?.max_users || 999,
-        maxItems: planData?.max_items || 9999,
+        name: planName,
+        maxUsers: limits.maxUsers,
+        maxItems: limits.maxItems,
+        maxWarehouses: limits.maxWarehouses,
         price: Number(sub?.value || planData?.value || 0),
         interval: 'monthly',
         features: planData?.description
@@ -721,16 +756,20 @@ export const db = {
       .select('*')
       .eq('status', 'active');
 
-    return (data || []).map(p => ({
-      id: p.id,
-      name: p.name,
-      maxUsers: p.max_users,
-      maxItems: p.max_items,
-      price: Number(p.value),
-      interval: 'monthly',
-      features: p.description ? [p.description] : [],
-      active: p.status === 'active'
-    }));
+    return (data || []).map(p => {
+      const limits = PLAN_LIMITS[p.name as keyof typeof PLAN_LIMITS] || { maxUsers: p.max_users, maxItems: p.max_items, maxWarehouses: 1 };
+      return {
+        id: p.id,
+        name: p.name,
+        maxUsers: limits.maxUsers,
+        maxItems: limits.maxItems,
+        maxWarehouses: limits.maxWarehouses,
+        price: Number(p.value),
+        interval: 'monthly',
+        features: p.description ? [p.description] : [],
+        active: p.status === 'active'
+      };
+    });
   },
 
   async sendMagicLink(email: string, captchaToken?: string): Promise<void> {
@@ -1387,21 +1426,26 @@ export const db = {
   async canAccessModule(companyId: string, moduleId: SystemModule): Promise<boolean> {
     const sub = await this.getSubscription(companyId);
     if (!sub?.plan?.features || sub.plan.features.length === 0) {
-      // Basic plans might not have explicit features in description yet, 
-      // but 'inventory' is usually basic.
       if (moduleId === 'inventory') return true;
       return false;
     }
 
     const normalizedPlanName = sub.plan.name.toLowerCase();
-    if (normalizedPlanName.includes('partners') || normalizedPlanName.includes('enterprise')) return true;
+    if (normalizedPlanName.includes('partners') || normalizedPlanName.includes('enterprise') || normalizedPlanName.includes('intelligence')) return true;
 
     return sub.plan.features.some(feature => {
       const f = feature.toLowerCase();
       if (f.includes('ilimitado') || f.includes('unlimited') || f.includes('todos os módulos')) return true;
 
       const mappedModule = MODULE_MAPPING[feature];
-      return mappedModule === moduleId;
+      if (mappedModule) return mappedModule === moduleId;
+
+      // Plan Name fallback for specific module access
+      if (moduleId === 'units' && normalizedPlanName.includes('intelligence')) return true;
+      if (moduleId === 'reports' && (normalizedPlanName.includes('pro') || normalizedPlanName.includes('business') || normalizedPlanName.includes('intelligence'))) return true;
+      if (moduleId === 'ai' && (normalizedPlanName.includes('intelligence'))) return true;
+
+      return false;
     });
   },
 
